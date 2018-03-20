@@ -1,18 +1,21 @@
 # External Modules
-import plotly.plotly     as py
-import plotly.graph_objs as go
+from typing import Tuple,List
+import plotly.plotly     as py #type: ignore
+import plotly.graph_objs as go #type: ignore
 from plotly.plotly import plot as onlineplot
-from plotly.offline import plot as off_plot
-from plotly.grid_objs import Grid, Column
+from plotly.offline import plot as off_plot #type: ignore
+from plotly.grid_objs import Grid, Column #type: ignore
 import time
 
-import itertools,os,ase,ase.io,sys
+import itertools,os,sys
+import ase,ase.io #type: ignore
 from copy import deepcopy
-import numpy as np
-from ase.data import covalent_radii, atomic_numbers
-from CataLog.misc.utilities import merge_dicts,negate, flatten
-from CataLog.structure.graph import GraphMaker
-
+import numpy as np #type: ignore
+from ase.data import covalent_radii, atomic_numbers #type: ignore
+import networkx as nx #type: ignore
+# Internal Modules
+from graphatoms.misc.utilities import merge_dicts,negate, flatten #type: ignore
+from graphatoms.structure.graph import GraphMaker,GraphInput #type: ignore
 
 user = os.environ['USER']
 #####
@@ -21,7 +24,11 @@ class PlotlyAtoms(object):
     Object for creating atoms objects and theircorresponding network graphs
     """
 
-    def __init__(self, graph,show_indices=None,repeat = (1,1)):
+    def __init__(self
+                , graph         : nx.Graph
+                , show_indices  : List[int]      = None
+                ,repeat         : Tuple[int,int] = (1,1)
+                ) -> None:
         #Assertions for input data
         """
         IN FUTURE, STORE CELL AS ATTRIBUTE TO GRAPH, ALL OTHER INFO IN NODES
@@ -35,13 +42,14 @@ class PlotlyAtoms(object):
         self.Xn, self.Yn, self.Zn   = zip(*map(lambda x: x['position'],self.graph.node.values()))
 
         #Chemical Info
-        self.chemical_symbols       = map(lambda x: x['symbol'],self.graph.node.values())
-        self.chemical_formula       = ''.join(map(lambda symb: symb+str(self.chemical_symbols.count(symb)),np.sort(list(set(self.chemical_symbols)))))
+        self.chemical_symbols       = list(map(lambda x: x['symbol'],self.graph.node.values()))
+        self.chemical_formula       = ''.join(map(lambda symb: symb+str(self.chemical_symbols.count(symb))
+                                                 ,np.sort(list(set(self.chemical_symbols)))))
 
         #Visualization Parameters
         self.repeat                 = repeat
         if show_indices is None:
-            self.show_indices       = range(len(self.Xn))
+            self.show_indices       = list(range(len(self.Xn)))
         else:
             if -1 in show_indices:
                 show_indices.append(len(self.Xn)-1)
@@ -49,15 +57,18 @@ class PlotlyAtoms(object):
 
         #Create traces and layout
         self.set_grid_data()
-        self.data                   = {}
+        self.data                   = {} # type: dict
         self.edge_trace             = self.get_edge_trace()
         self.node_trace             = self.get_node_trace()
         self.data                   = self.node_trace+self.edge_trace
         self.set_layout()
 
 
-    def set_grid_data(self,size_factor = 40):
-        from label import label2Color
+    def set_grid_data(self,size_factor : int = 40) -> None:
+        """
+        Helpful docstring from mike
+        """
+        from label import label2Color #type: ignore
         colors = map(label2Color, self.chemical_symbols)
         size = map(lambda symb: covalent_radii[atomic_numbers[symb]]*size_factor, self.chemical_symbols)
         text = self.get_atom_labels()
@@ -69,8 +80,8 @@ class PlotlyAtoms(object):
                 self.Yn += [self.Xn+shift[1]]
                 self.Zn += [self.Xn+shift[2]]
 
-        self.Xe,self.Ye,self.Ze               = [],[],[]
-        counted_edges,edge_labels,edge_colors = [],[],[]
+        self.Xe,self.Ye,self.Ze               = [],[],[] # type: Tuple[list,list,list]
+        counted_edges,edge_labels,edge_colors = [],[],[] # type: Tuple[list,list,list]
 
         for x_shift in range(self.repeat[0]):
             for y_shift in range(self.repeat[1]):
@@ -85,7 +96,7 @@ class PlotlyAtoms(object):
                             edge_color = self.get_red_blue_color(edge_dict.get('bondorder',None))
                             edge_colors+= [edge_color]*3
                             counted_edges.append((i,j))
-                            edge_label = [str((i,j))]+map(lambda key: str(edge_dict.get(key,'')),['bondorder','weight'])
+                            edge_label = [str((i,j))]+ list(map(lambda key: str(edge_dict.get(key,'')),['bondorder','weight']))
                             edge_labels += ['edge pair: {0} <br> bond order: {1} <br> distance: {2}'.format(*edge_label)]*3
 
                             pbc_shift = self._get_pbc_shift(i, j, count)
@@ -109,7 +120,7 @@ class PlotlyAtoms(object):
         self.grid.append(Column(edge_labels,'edge_labels'))
         url = py.grid_ops.upload(self.grid, 'grid_data_plotly_'+str(time.time()), auto_open=False)
 
-    def get_atom_labels(self):
+    def get_atom_labels(self) -> List[str]:
         atom_indices_label      = ['Index: {0}'.format(x) for x in self.graph.nodes()]
         symbols_label           = ['Symbol: {0}'.format(x) for x in self.chemical_symbols]
         coordination_num_label  = ['Coord #: {0}'.format(x) for x in self.graph.degree().values()]
@@ -119,7 +130,7 @@ class PlotlyAtoms(object):
 
 
 
-    def _get_pbc_shift(self,ind_1,ind_2,count):
+    def _get_pbc_shift(self,ind_1 : int ,ind_2 : int ,count : int) -> Tuple[int,int,int]:
         from copy import deepcopy
         pbc_shift = np.array(self.graph[ind_1][ind_2][count]['pbc_shift'])
         if not ind_1 == ind_2:
@@ -180,16 +191,18 @@ class PlotlyAtoms(object):
         return [edge_trace]
 
     def set_layout(self):
-        axis=dict(showbackground=False,
-                  showline=True,
-                  zeroline=True,
-                  showgrid=True,
-                  showticklabels=True,
-                  autorange=True
+
+        axis=dict(showbackground= False,
+                  showline      = True,
+                  zeroline      = True,
+                  showgrid      = True,
+                  showticklabels= True,
+                  autorange     = True
                   )
         x_axis = merge_dicts([{'title':'X'},axis])
         y_axis = merge_dicts([{'title':'Y'},axis])
         z_axis = merge_dicts([{'title':'Z'},axis])
+
         self.layout = go.Layout(title=self.chemical_formula
                         ,dragmode = "turntable"
                         ,width=1000
@@ -203,86 +216,29 @@ class PlotlyAtoms(object):
                         ,hovermode='closest'
                         )
 
-    def plot(self, file_name = 'atoms_obj.html', offline = True):
+    def plot(self
+            , file_name = 'atoms_obj.html'
+            , offline = True):
         fig=go.Figure(data=self.data, layout=self.layout)
         if offline:
             output = off_plot(fig, filename = '/home/{0}/scp/plotly/{1}'.format(user,file_name),auto_open = False)
         else:
             output = onlineplot(fig, auto_open = False, sharing = 'public', filename = file_name)
-        print output
+        print(output)
         return self.graph
 
+def plotly_atoms_animation(graph_array
+                          ,file_name    : str            = 'atoms_obj.html'
+                          ,show_indices : List[int]      = None
+                          ,repeat       : Tuple[int,int] = (1,1)
+                          ,offline      : bool           = True
+                          ) -> None:
 
-def plotly_atoms_animation(graph_array, file_name = 'atoms_obj.html',show_indices = None, repeat = (1,1), offline = True):
-        plotly_atoms_list = map(lambda graph: PlotlyAtoms(graph, show_indices, repeat), graph_array)
+        plotly_atoms_list = list(map(lambda graph: PlotlyAtoms(graph, show_indices, repeat), graph_array))
         layout = plotly_atoms_list[0].layout
         data = plotly_atoms_list[0].data
         frames   = [{'data':plotly_atoms.data,'name':str(i)} for i, plotly_atoms in enumerate(plotly_atoms_list)]
-        # data   = flatten(data)
 
-
-        #Make the Slider
-        steps = []
-        for i in range(len(graph_array)):
-            steps.append({'args': [
-                [i],
-                {'frame': {'duration': 300, 'redraw': False},
-                 'mode': 'immediate',
-               'transition': {'duration': 300}}
-             ],
-             'label': i,
-             'method': 'animate'})
-
-        sliders = [dict(
-                        active = 0,
-                        transition = {'duration': 300, 'easing': 'cubic-in-out'},
-                        currentvalue = {"prefix": "Image Number: "},
-                        pad = {"t": 50},
-                        steps = steps
-                    )]
-        layout.update({'sliders':sliders})
-
-        layout['updatemenus']   = [
-                        {
-                            'buttons': [
-                                {
-                                    'args': [None, {'frame': {'duration': 500, 'redraw': False},
-                                             'fromcurrent': True, 'transition': {'duration': 300, 'easing': 'cubic-in-out'}}],
-                                    'label': 'Play',
-                                    'method': 'animate'
-                                },
-                                {
-                                    'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate',
-                                    'transition': {'duration': 0}}],
-                                    'label': 'Pause',
-                                    'method': 'animate'
-                                }
-                            ],
-                            'direction': 'left',
-                            'pad': {'r': 10, 't': 87},
-                            'showactive': False,
-                            'type': 'buttons',
-                            'x': 0.1,
-                            'xanchor': 'right',
-                            'y': 1,
-                            'yanchor': 'top'
-                        }
-                    ]
-
-        fig    = go.Figure(data=data, layout=layout, frames = frames)
-        if offline:
-            output = off_plot(fig, filename = '/home/{0}/scp/plotly/{1}'.format(user,file_name.strip('.html')))
-        else:
-            output =  py.create_animations(fig, auto_open = False, sharing = 'public', filename = file_name)
-        print output
-
-
-
-def plotly_atoms_animation(graph_array, file_name = 'atoms_obj.html',show_indices = None, repeat = (1,1), offline = True):
-        plotly_atoms_list = map(lambda graph: PlotlyAtoms(graph, show_indices, repeat), graph_array)
-        layout = plotly_atoms_list[0].layout
-        data = plotly_atoms_list[0].data
-        frames   = [{'data':plotly_atoms.data,'name':str(i)} for i, plotly_atoms in enumerate(plotly_atoms_list)]
         #Make the Slider
         steps = []
         for i in range(len(graph_array)):
@@ -319,71 +275,22 @@ def plotly_atoms_animation(graph_array, file_name = 'atoms_obj.html',show_indice
             output = off_plot(fig, filename = '/home/{0}/scp/plotly/{1}'.format(user,file_name.strip('.html')))
         else:
             output =  py.create_animations(fig, auto_open = False, sharing = 'public', filename = file_name)
-        print output
+        print(output)
 
-def plotly_neb(pth,num_of_images=7,show_indices = [-1]):
-    graph_array = map(lambda ind: GraphMaker(include_frac=0.9,group_cut=0.3,min_bo=0.03).make_graph(pth,'neb{}'.format(ind)),range(num_of_images))
+def plotly_neb(pth           : str
+              ,num_of_images : int       = 7
+              ,show_indices  : List[int] = [-1]
+              ) -> None:
+
+    gm = GraphMaker(include_frac=0.9,group_cut=0.3,min_bo=0.03)
+
+    def f(ind): return gm.make_graph(GraphInput(pth,'neb{}'.format(ind)))
+
+    graph_array = [f(x) for x in range(num_of_images)]
+
     plotly_atoms_animation(graph_array,show_indices = show_indices, offline = False, file_name = None)
 
 if __name__ == '__main__':
     rootdir = '/scratch/users/ksb/demos/mike_demo/'
     pth = os.path.join(rootdir,sys.argv[1])
     plotly_neb(pth)
-
-    # def slider_plot(self, plateau_array = np.arange(0.05,0.3,0.05), file_name = 'atoms_obj.html', cell = False, offline = True):
-    #     from plotly.plotly import plot as onlineplot
-    #     from plotly.offline import plot as off_plot
-    #     from plotly.offline import iplot as off_iplot
-    #
-    #
-    #     edge_array = [self.get_edge_trace() for plateau_temp in plateau_array]
-    #     layout = deepcopy(self.layout)
-    #
-    #     #Make the Slider
-    #     steps = []
-    #     for i in range(len(plateau_array)):
-    #         step = dict(
-    #             method = 'restyle',
-    #             label = str(plateau_array[i]),
-    #             args = ['visible', [False] * (len(plateau_array)+1)],
-    #         )
-    #         step['args'][1][i] = True # Toggle i'th trace to "visible"
-    #         step['args'][1][-1] = True
-    #         steps.append(step)
-    #
-    #     sliders = [dict(
-    #                     active = np.floor(len(plateau_array))/2,
-    #                     currentvalue = {"prefix": "Neighbor Plateau: "},
-    #                     pad = {"t": 50},
-    #                     steps = steps
-    #                 )]
-    #     layout.update({'sliders':sliders})
-    #
-    #     trace = edge_array+[self.data['node_trace']]
-    #     fig=go.Figure(data=trace, layout=layout)
-    #     if offline:
-    #         output = off_plot(fig, filename = '/home/{0}/scp/plotly/{1}'.format(user,file_name),auto_open = False)
-    #     else:
-    #         output = onlineplot(fig, auto_open = False, sharing = 'public', filename = file_name)
-    #     print output
-    #
-    #
-    #
-    # def get_cell_trace(self):
-    #     x = [0, 0, 1, 1, 0, 0, 1, 1]
-    #     y = [0, 1, 1, 0, 0, 1, 1, 0]
-    #     z = [0, 0, 0, 0, 1, 1, 1, 1]
-    #     vecs = np.array(zip(x,y,z))
-    #     cell_vertices = np.dot(vecs, self.atoms.cell)
-    #     cell_trace = go.Mesh3d(
-    #                              x = cell_vertices[:,0]
-    #                             ,y = cell_vertices[:,1]
-    #                             ,z = cell_vertices[:,2]
-    #                             ,i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
-    #                             ,j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
-    #                             ,k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
-    #                             ,opacity = 1
-    #                             ,vertexcolor = 1
-    #                             ,facecolor= 1
-    #                             )
-    #     return cell_trace

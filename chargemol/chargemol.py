@@ -1,13 +1,16 @@
 # External
-import os,math,time,json,sys,io,shutil,random,ase,glob,string,itertools
-import numpy as np
-from ase.units import Bohr
-from ase.io import write,read
-from os.path import exists,join,getctime
+from typing import Tuple,List,Iterator,Dict
+import os,math,time,json,sys,io,shutil,random,glob,string,itertools
+from os.path    import exists,join,getctime
+
+import ase                          #type: ignore
+import numpy as np                  #type: ignore
+from ase.units  import Bohr         #type: ignore
+from ase.io     import write,read   #type: ignore
+
 # Internal
-from graphatoms.misc.utilities import (flatten,get_analysis_folder,get_sherlock_folder
-                                   ,safeMkDir,safeMkDirForce,running_jobs_sherlock)
-from graphatoms.misc.print_parse  import print_sleep,print_time
+from graphatoms.misc.utilities import (flatten,safeMkDir,safeMkDirForce,running_jobs_sherlock) #type: ignore
+from graphatoms.misc.print_parse  import print_time #type: ignore
 
 """
 FUNCTIONS NEEDED TO GENERATE BONDS.JSON
@@ -18,17 +21,9 @@ FUNCTIONS NEEDED TO GENERATE BONDS.JSON
 ###########
 user         = os.environ['USER']
 home         = os.environ['HOME']
-catalog      = os.environ['CataLogPath']
-hostname     = os.environ['HOSTNAME']
+graphatoms   = os.environ['GRAPHATOMS_PATH']
+queue        = 'iric' if os.environ['SHERLOCK'] == 1 else 'normal'
 
-if 'sh' in hostname or 'gpu' in hostname:
-    sher = os.environ['SHERLOCK']
-    if   sher == '1':  host,queue = 'sherlock','iric'
-    elif sher == '2':  host,queue = 'sherlock2','suncat'
-    else: raise ValueError, 'What cluster is this? '+sher
-elif    'su'      in hostname: host = 'suncat'
-elif    'nid'     in hostname: host = 'nersc'
-else: raise ValueError, 'What cluster is this? '+hostname
 
 conv_dict = {'low':1,       'mid':0.1,     'high': 0.01, 'tom': 0.01}
 pw_dict   = {'low':300,     'mid':400,     'high': 500,  'tom': 600}
@@ -38,11 +33,15 @@ logfile   = {'gpaw':'log','qe':'calcdir/log','vasp':'OUTCAR'}
 time_dict2= {'gpaw':0.5,    'qe':2,          'vasp':1}
 
 codes     = ['gpaw','vasp']#,'qe']
-qualities = ['low']#,'mid','high']
+qualities = ['low']#],'mid','high']
 ############################################
 
-def test_suite(working_path,trajname):
-    """Run a suite of tests on a directory with a traj in it"""
+def test_suite(working_path : str
+              ,trajname     : str
+              ) -> None:
+    """
+    Run a suite of tests on a directory with a traj in it
+    """
 
     for code,quality in itertools.product(codes,qualities):
         new_path = join(working_path,code,quality)
@@ -52,68 +51,60 @@ def test_suite(working_path,trajname):
 
         BondAnalyzer(code,quality).submit(new_path,trajname)
 
-def submit_tom():
-    base   = '/scratch/users/ksb/demos/tom_demo/chrgml'
 
-    for root, dirs, files in os.walk(base):
-        conditions = ['chargemol_analysis' not in root
-                     ,'gpaw' not in root,'vasp' not in root
-                    ,'qn.traj' in files]
-
-        if all(conditions):
-            vroot,groot = [join(root,x) for x in ['vasp','gpaw']]
-
-            safeMkDir(vroot) ; safeMkDir(groot)
-            vbonds,gbonds = [join(x,'chargemol_analysis/qn/bonds.json')
-                                                        for x in [vroot,groot]]
-
-            if not os.path.exists(vbonds):
-                shutil.copyfile(join(root,'qn.traj'),join(vroot,'qn.traj'))
-                BondAnalyzer('vasp','tom').submit(vroot,'qn')
-
-            if not os.path.exists(gbonds):
-                shutil.copyfile(join(root,'qn.traj'),join(groot,'qn.traj'))
-                BondAnalyzer('gpaw','tom').submit(groot,'qn')
-
-################################################################################
 ################################################################################
 ################################################################################
 
 class BondAnalyzer(object):
     """
+    Parameterizes a set of methods that manipulate Atoms objects and produce
+    a file (bond.json) that contains information needed to construct a graph
+
+    Parameters:
     dftcode - {'gpaw','qe','vasp'}
-    quality - {'low','mid','high'}
+    quality - {'low','mid','high','tom'}
     """
-    def __init__(self,dftcode='gpaw',quality='low'):
+
+    def __init__(self
+                ,dftcode : str ='gpaw'
+                ,quality : str = 'low'
+                ) -> None:
+
         assert dftcode in ['gpaw','qe','vasp']
         assert quality in ['low','mid','high','tom']
+        if dftcode == 'vasp' and quality == 'tom':  # we are using BEEF functional
+            assert 'VASP_VDW_KERNEL' in os.environ
 
         self.dftcode = dftcode
         self.quality = quality
 
     # META METHODS
     #--------------------
-    def _create_analysis_folder(self,working_path,trajname):
+    def _create_analysis_folder(self
+                               ,root_folder : str
+                               ,trajname    : str
+                               ) -> Tuple[str,str]:
         """
         Creates a directory for job analysis as well as:
-        <analysis root>/chargemol_analysis/<trajname>/
+        <root_folder>/chargemol_analysis/<trajname>/
         Returns the analysis folder and traj path
         """
-        root_folder     = get_analysis_folder(working_path)
         analysis_folder = join(root_folder,'chargemol_analysis',trajname)
-        traj_path       = join(working_path,'%s.traj'%trajname)
+        traj_path       = join(root_folder,'%s.traj'%trajname)
 
         safeMkDirForce(analysis_folder)
         shutil.copyfile(traj_path,join(analysis_folder,'%s.traj'%trajname))
-        if self.dftcode=='vasp':
+
+        if self.dftcode=='vasp' and self.quality=='tom':
             home    = os.environ['HOME']
             vdwpth  = join(home,'../ksb/scripts/vasp/vdw_kernel.bindat')
             shutil.copyfile(vdwpth,join(analysis_folder,'vdw_kernel.bindat'))
-            print 'moved from %s to %s'%(vdwpth,analysis_folder)
 
         return analysis_folder,traj_path
 
-    def _write_metascript(self,analysis_path):
+    def _write_metascript(self
+                         ,analysis_path : str
+                         ) -> None:
         """
         Write a script which, when sbatch'd (ON SHERLOCK), will perform bond order analysis
         """
@@ -142,7 +133,14 @@ class BondAnalyzer(object):
         with open(path,'w') as f: f.write(script)
         os.system('chmod 755 ' + path)
 
-    def _write_script(self,analysis_path,working_path,trajname):
+    def _write_script(self
+                     ,analysis_path : str
+                     ,working_path  : str
+                     ,trajname      : str
+                     ) -> None:
+        """
+        Helpful docstring
+        """
         script = ('from CataLog.chargemol.chargemol import BondAnalyzer\n'
                 +"BondAnalyzer('%s','%s')"%(self.dftcode,self.quality)
                 +".analyze('%s','%s')"%(working_path,trajname))
@@ -153,8 +151,12 @@ class BondAnalyzer(object):
     # MAIN PIPELINE METHODS
     #----------------------
 
-    def _generate_charge_density(self,analysis_path,atoms_path):
+    def _generate_charge_density(self
+                                ,analysis_path : str
+                                ,atoms_path    : str
+                                ) -> None:
         """
+        Helpful docstring
         """
         # Initialize
         #-----------
@@ -183,8 +185,14 @@ class BondAnalyzer(object):
             #print 'normalization factor = ',extra_charge
             #normalize_cube('valence_density.cube',extra_charge)
 
-    def _write_chargemol_input(self,analysis_path, _ ):
-        """Write job_control.txt to an analysis folder"""
+    def _write_chargemol_input(self
+                              ,analysis_path : str
+                              ,atoms_path    : str
+                              ) -> None:
+        """
+        Write job_control.txt to an analysis folder
+        """
+
         if self.dftcode=='qe':
             core_dict = self._core_dict(analysis_path)
             core = '\n'.join(['<number of core electrons>'
@@ -198,7 +206,7 @@ class BondAnalyzer(object):
                                 ,"</periodicity along A, B, and C vectors>"
                                 ,'<compute BOs>','.true.','</compute BOs>'
                                 ,'<atomic densities directory complete path>'
-                                ,'{0}/chargemol/atomic_densities/'.format(catalog)
+                                ,'{0}/chargemol/atomic_densities/'.format(graphatoms)
                                 ,'</atomic densities directory complete path>'
                                 ,'<charge type>','DDEC6','</charge type>'
                                 ,core])
@@ -206,12 +214,18 @@ class BondAnalyzer(object):
         with open(join(analysis_path,'job_control.txt'),'w') as f:
             f.write(job_control)
 
-    def _call_chargemol(self,analysis_path, _ ):
-        """Call chargemol binary from a specified folder"""
+    def _call_chargemol(self
+                       ,analysis_path : str
+                       ,atoms_path    : str
+                       ) -> None:
+        """
+        Call chargemol binary from a specified folder
+        """
+
         os.chdir(analysis_path)
         path_to_chargemol = join(home,'CataLog','chargemol','chargemol_binary') # need to compile parallel with relaxed tolerance but getting error
         os.system(path_to_chargemol)
-        print 'executing: ',path_to_chargemol
+        print('executing: ',path_to_chargemol)
         check = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')
         if not exists(check):
             pass
@@ -220,7 +234,14 @@ class BondAnalyzer(object):
             #normalize_cube('valence_density.cube',c)
             #os.system(path_to_chargemol)
 
-    def _postprocess(self,analysis_path,atoms_path):
+    def _postprocess(self
+                    ,analysis_path : str
+                    ,atoms_path    : str
+                    ) -> None:
+        """
+        Helpful docstring
+        """
+
         if self.dftcode=='vasp': sortdict = self._sort_dict(analysis_path)
         else:                    sortdict = {}
 
@@ -229,31 +250,51 @@ class BondAnalyzer(object):
         data = [e.__dict__ for e in potential_edges]
         with open(join(analysis_path,'bonds.json'),'w') as f: json.dump(data,f)
 
-    def _write_metadata(self,analysis_path, _ ):
-        """Write data about how bonds.json was calculated to file"""
+    def _write_metadata(self
+                       ,analysis_path : str
+                       ,atoms_path    : str
+                       ) -> None:
+        """
+        Write data about how bonds.json was calculated to file
+        """
+
         pth      = join(analysis_path,'metadata.json')
         ctime    = getctime(join(analysis_path,logfile[self.dftcode]))
         metadata = {'timestamp':time.time(),'user':user
                     ,'dftcode':self.dftcode,'quality':self.quality
                     ,'time':time.time() - ctime}
-        with open(pth,'w') as f: json.dump(metadata,f)
+
+        with open(pth,'w') as f:
+            json.dump(metadata,f)
 
     # DFTCODE-SPECIFIC METHODS
     #-------------------------
-    def _mk_kpts(self,atoms_path):
-        """Chooses appropriate kpt spacing"""
+    def _mk_kpts(self
+                ,atoms_path : str
+                )->List[int]:
+        """
+        Chooses appropriate kpt spacing
+        """
+        # handle special case
         if self.quality == 'tom':
-            print 'using 441 kpts because TOM'
+            print('using 441 kpts because TOM')
             return [4,4,1]
 
-        def get_kpt(x): return int(math.ceil(15/np.linalg.norm(x)))
-        cell = read(atoms_path).get_cell()
-        return  map(get_kpt,cell)
+        def get_kpt(x):
+            return int(math.ceil(15/np.linalg.norm(x)))
 
-    def _mk_gpaw(self,atoms_path):
-        """Make a GPAW calculator"""
-        import gpaw,gpaw.poisson
-        from gpaw.utilities import h2gpts
+        cell = read(atoms_path).get_cell() # 3 x 3 array
+
+        return  list(map(get_kpt,cell))
+
+    def _mk_gpaw(self
+                ,atoms_path : str
+                ): # ignore return type ... not everyone can import GPAW
+        """
+        Make a GPAW calculator
+        """
+        import gpaw,gpaw.poisson #type: ignore
+        from gpaw.utilities import h2gpts #type: ignore
         cell  = read(atoms_path).get_cell()
         scale = conv_dict[self.quality]
         return gpaw.GPAW(mode='lcao',basis = 'dzp',mixer=gpaw.Mixer(0.1, 5, 100)
@@ -264,9 +305,13 @@ class BondAnalyzer(object):
                         ,convergence   = {'energy':0.1 * scale
                                          ,'density':0.01 * scale
                                          ,'bands':-10})
-    def _mk_vasp(self,atoms_path):
-        """Make a VASP calculator"""
-        import ase.calculators.vasp as vasp_calculator
+    def _mk_vasp(self
+                ,atoms_path : str
+                ): # ignore return type
+        """
+        Make a VASP calculator
+        """
+        import ase.calculators.vasp as vasp_calculator #type: ignore
 
         if self.quality == 'tom': xc = 'beef-vdw'
         else:                     xc = 'PBE'
@@ -276,9 +321,13 @@ class BondAnalyzer(object):
                                     ,algo= 'fast',prec = 'accurate',nsw =  0
                                     ,nelmdl=3 ,isym= 0 ,lcharg = True,laechg = True)
 
-    def _mk_qe(self,atoms_path):
-        """Make a QE calculator"""
-        from espresso import espresso
+    def _mk_qe(self
+              ,atoms_path : str
+              ): # ignore return type
+        """
+        Make a QE calculator
+        """
+        from espresso import espresso #type: ignore
         return espresso( pw      = pw_dict[self.quality]
                         ,dw      = pw_dict[self.quality] * 10
                         ,xc      = 'BEEF'
@@ -294,21 +343,27 @@ class BondAnalyzer(object):
                                        ,'maxsteps':    200}
                         ,outdir='calcdir')
 
-    def _sort_dict(self,analysis_path):
+    def _sort_dict(self
+                  ,analysis_path : str
+                  ) -> Dict[int,int]:
         """
         Read ase-sort.dat. Only should be called if VASP
         """
+
         with open(join(analysis_path,'ase-sort.dat'),'r') as f:
             loglines = map(lambda x: map(int,x.split()),f.readlines())
-            return dict(map(tuple,loglines))
+            return {x:y for x,y in loglines} #dict(map(tuple,loglines))
 
-    def _core_dict(self,analysis_path):
+    def _core_dict(self
+                  ,analysis_path : str
+                  ) -> Dict[int,int]:
         """
         For QE calculations, get {atomic number : # core electrons}
         """
+
         cordict = {}
         with open(join(analysis_path,'calcdir','log'),'r') as f:
-            loglines = filter(None,map(string.split,f.readlines()))
+            loglines = list(filter(None,[x.split() for x in f.readlines()]))
             for i,line in enumerate(loglines):
                 if line[0] == 'PseudoPot.':                      # for each PSP:
                     elem = line[4]                               # symbol
@@ -319,7 +374,13 @@ class BondAnalyzer(object):
 
     # EXPOSED METHODS
     #-----------------
-    def submit(self,working_path,trajname):
+    def submit(self
+              ,working_path : str
+              ,trajname     : str
+              ) -> None:
+        """
+        Hlepful docstring
+        """
         analysis_path,trajpth= self._create_analysis_folder(working_path,trajname)
         checks = [analysis_path in running_jobs_sherlock()
                  ,exists(join(analysis_path,'bonds.json'))]
@@ -329,8 +390,14 @@ class BondAnalyzer(object):
             os.chdir(analysis_path)
             os.system('sbatch %s'%join(analysis_path,'sub_chargemol.sh'))
 
-    def analyze(self,working_path,trajname,start_ind=0):
-        """Start the process at any point"""
+    def analyze(self
+               ,working_path : str
+               ,trajname     : str
+               ,start_ind    : int = 0
+               ) -> None:
+        """
+        Start the process at any point using start_ind
+        """
 
         analysis_path,trajpth= self._create_analysis_folder(working_path,trajname)
 
@@ -343,30 +410,14 @@ class BondAnalyzer(object):
         for process in pipeline[start_ind:]:
             process(analysis_path,trajpth)
 
-    def launch_neb(self,neb_path):
-        """Take a neb folder to generate chargemol jobs for all images"""
+    def launch_neb(self
+                  ,neb_path : str
+                  ) -> None:
+        """
+        Take a neb folder to generate chargemol jobs for all images
+        """
         os.chdir(neb_path)
         for neb in glob.glob('neb?.traj'): self.submit(neb_path,neb)
-
-    def launch_catalog(self,constraints=[],limit=1, array=False):
-        """
-        Randomly attempt bond order analysis on jobs in a user's directory if
-        it hasn't already been completed
-        """
-        from CataLog.datalog.db_utils  import Query
-        from CataLog.datalog.manageDB  import update_db
-        counter = limit # we don't want to limit the Query because all threads would have the same job
-        if array:
-            print_sleep(random.randint(0,60)) # randomly wait so that all array jobs don't query at same time
-        update_db('chargemol',load=False,retry=True,verbose=False)
-        folders = Query(constraints=constraints+[RELAXORLAT_,Not(CHARGEMOL)]
-                            ,table=job,order=Random(),limit=limit).query_col(STORDIR)
-
-
-        assert len(folders)==limit, '%d != limit %d '%(len(folders),limit)
-        for folder in folders:
-            for t in ['init','final']:
-                self.submit(get_sherlock_folder(folder),t)
 
 ################################################################################
 ################################################################################
@@ -375,17 +426,51 @@ class BondAnalyzer(object):
 ####################
 # Parsing Classes
 #--------------------
+
+class PotentialEdge(object):
+    """
+    Container for information we need to decide later if it's a
+    graph-worthy bond. This class is nothing more than a dictionary.
+    """
+    def __init__(self
+                ,fromNode   : int
+                ,toNode     : int
+                ,distance   : float
+                ,offset     : Iterator[int]
+                ,bond_order : float
+                ,tot        : float
+                ) -> None:
+
+        self.fromNode = fromNode
+        self.toNode   = toNode
+        self.distance = round(distance,2)
+        self.offset   = offset
+        self.bondorder= round(bond_order,3)
+        self.total_bo = round(tot,2)
+
+
 class BondOrderSection(object):
     """Process one section of the Bond Order output of Chargemol"""
-    def __init__(self,atoms,ind,sumBO,raw_lines,sortdict,pbcdict):
-        self.atoms = atoms                     # ase.Atoms
-        self.ind   = ind                       # Int
-        self.sumBO = sumBO                     # Float
-        self.bonds = map(parse_line,raw_lines) # [(index,bo,offset)]
+    def __init__(self
+                ,atoms     : ase.Atoms
+                ,ind       : int
+                ,sumBO     : float
+                ,raw_lines : List[str]
+                ,sortdict  : dict
+                ,pbcdict   : dict
+                ) -> None:
+
+        self.atoms    = atoms                     # ase.Atoms
+        self.ind      = ind                       # Int
+        self.sumBO    = sumBO                     # Float
+        self.bonds    = map(parse_line,raw_lines) # [(index,bo,offset)]
         self.sortdict = sortdict
         self.pbcdict  = pbcdict
 
-    def _relative_shift(self,i,j):
+    def _relative_shift(self
+                       ,i : int
+                       ,j : int
+                       ) -> np.array:
         """
         Given a pbc_dict and two indices, return the original pbc shift
         for a bond from i to j
@@ -393,10 +478,13 @@ class BondOrderSection(object):
         pi,pj = [np.array(self.pbcdict[x]) for x in [i,j]]
         return pj - pi
 
-    def makeEdge(self,(toInd,bo,offset)):
+    def makeEdge(self
+                ,tup :  Tuple[int,float,Iterator[int]]
+                ) -> PotentialEdge:
         """
         Creates an Edge instance from the result of a parsed Bond Order log line
         """
+        (toInd,bo,offset) = tup
         fromInd = self.ind
 
         if self.sortdict: # undo VASP reordering if necessary
@@ -412,32 +500,25 @@ class BondOrderSection(object):
 
         return PotentialEdge(fromInd,toInd,d,offset,bo,self.sumBO)
 
-    def make_edges(self):
+    def make_edges(self)->List[PotentialEdge]:
         """Apply edgemaker to result of parsing logfile lines"""
-        return  map(self.makeEdge,self.bonds)
+        return  list(map(self.makeEdge,self.bonds))
 
-class PotentialEdge(object):
-    """
-    Container for information we need to decide later if it's a
-    graph-worthy bond. This class is nothing more than a dictionary.
-    """
-    def __init__(self,fromNode,toNode,distance,offset,bond_order,tot):
-        self.fromNode = fromNode            # Int
-        self.toNode   = toNode              # Int
-        self.distance = round(distance,2)   # Float
-        self.offset   = offset              # (Int,Int,Int)
-        self.bondorder= round(bond_order,3) # Float
-        self.total_bo = round(tot,2)        # Float
 
 ###################
 # Parsing Functions
 #-------------------
 
-def parse_chargemol(analysis_path,atoms_path,sortdict):
+def parse_chargemol(analysis_path : str
+                   ,atoms_path    : str
+                   ,sortdict      : dict
+                   ) -> List[PotentialEdge]:
     """
     Read file DDEC6_even_tempered_bond_orders.xyz
     """
-    header,content,sections,head_flag,counter, = [],[],[],True,-1       # Initialize
+    header,content    = [], [] # type: Tuple[List[str],List[str]]
+    sections          = []     # type: List[BondOrderSection]
+    head_flag,counter = True,-1       # Initialize
     filepath = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')# File to parse
 
     atoms = read(atoms_path)
@@ -462,7 +543,7 @@ def parse_chargemol(analysis_path,atoms_path,sortdict):
 
     return  flatten([x.make_edges() for x in sections]) # single list of edges
 
-def parse_line(line):
+def parse_line(line : str) -> Tuple[int,float,Iterator[int]]:
     """
     Get bonded atom, bond order, and offset
     """
@@ -477,7 +558,7 @@ def parse_line(line):
 # Misc
 #-----
 
-def parse_chargemol_pbc(header_lines,cell):
+def parse_chargemol_pbc(header_lines : List[str],cell : List[float]):
     atoms = ase.Atoms(cell=cell)
     for i,l in enumerate(header_lines[2:]):
         try:
@@ -488,17 +569,38 @@ def parse_chargemol_pbc(header_lines,cell):
     return mk_pbc_dict(atoms)
 
 
-def mk_pbc_dict(atoms):
-    def f(x):
-        if   x < 0: return -1
-        elif x < 1: return 0
-        else:       return 1
+def mk_pbc_dict(atoms : ase.Atoms
+               ) -> Dict[int,Tuple[int,int,int]]:
+    """
+    Helpful docstring
+    """
+    def g(tup):
+        """
+        Helper function to yield tuples for pbc_dict
+        """
 
-    scaled_pos = zip(range(len(atoms)),atoms.get_scaled_positions(wrap=False).tolist())
-    pbc_dict   = {i : map(f,p) for i,p in scaled_pos}
+        def f(x):
+            """
+            Helper function for g
+            """
+            if   x < 0: return -1
+            elif x < 1: return 0
+            else:       return 1
+
+        x,y,z = tup
+        return (f(x),f(y),f(z))
+
+    scaled_pos  = atoms.get_scaled_positions(wrap=False).tolist()
+    scaled_pos_ = zip(range(len(atoms)),scaled_pos)
+    pbc_dict    = {i : g(p) for i,p in scaled_pos_}
     return pbc_dict
 
-def dict_diff(d1,d2):
+def dict_diff(d1:Dict[int,np.array]
+             ,d2:Dict[int,np.array]
+             )->Dict[int,np.array]:
+    """
+    Helpful docstring
+    """
     return {i: np.array(d2[i]) - np.array(d1[i]) for i in d1.keys()}
 
 

@@ -1,7 +1,8 @@
 # External Modules
-import ase
+import ase #type: ignore
+
 # Internal Modules
-from CataLog.misc.atoms import angle,dihedral
+from graphatoms.misc.atoms import angle,dihedral #type: ignore
 
 
 
@@ -20,7 +21,6 @@ def nearest_neighbor(atoms,atom,exclude=[],include=None):
                 nn = a
     return nn
 
-
 def center(atoms,ind):
     """Centers x,y coordinates about a particular atom"""
     a = atoms.copy()
@@ -29,7 +29,6 @@ def center(atoms,ind):
     a.positions -= [p[0],p[1],0] - (c[0]+c[1])/2
     a.wrap(pbc=[1,1,0])
     return a
-
 
 
 def atomsZ(atoms):
@@ -45,22 +44,22 @@ def atomsZ(atoms):
     before saving cell, need to rotate it so that the X vector is aligned
     with the first two atoms, for example
     """
-    import emt
+    import emt #type: ignore
     atoms.set_calculator(emt.EMT())
     atoms.get_potential_energy()
     forces  = atoms.get_forces()
-    print 'Calculated EMT forces'
+    print('Calculated EMT forces')
     srted   = sorted([(np.linalg.norm(f),a) for f,a in zip(forces,atoms)])
     ordered = [a for f,a in reversed(srted)] # list of atoms, decreasing forces
     centered = center(atoms,ordered[0].index)
-    print 'Centered about high-force atom'
+    print('Centered about high-force atom')
     n    = len(atoms)
     c    = atoms.get_cell()
     a0   = centered[0]
     r0   = ZRow([],[a0.symbol])
     if n == 1: return ZMatrix(c,[r0])
     a1   = nearest_neighbor(centered,a0)
-    print 'got nearest neighbor'
+    print('got nearest neighbor')
     v01  = a1.position-a0.position
     r1   = ZRow([r0],[a1.symbol,round(np.linalg.norm(v01),2)])
     if n == 2: return ZMatrix(c,[r0,r1])
@@ -141,4 +140,4 @@ class ZMatrix(object):
 def main():
     testAtoms = ase.Atoms(numbers=[1,1],positions=[[10,10,10],[10,10,11]],cell=[[20,0,0],[0,20,0],[0,0,20]])
     #testAtoms2 = ase.Atoms([1,1],[[10,10,10.01],[10,10,11]],[[20,0,0],[0,20,0],[0,0,20]])
-    print atomsZ(testAtoms)
+    print(atomsZ(testAtoms))
