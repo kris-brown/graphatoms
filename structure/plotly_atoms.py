@@ -5,14 +5,14 @@ import plotly.graph_objs as go #type: ignore
 from plotly.plotly import plot as onlineplot
 from plotly.offline import plot as off_plot #type: ignore
 from plotly.grid_objs import Grid, Column #type: ignore
-import time
 
-import itertools,os,sys
+import itertools,os,sys,time
 import ase,ase.io #type: ignore
 from copy import deepcopy
 import numpy as np #type: ignore
 from ase.data import covalent_radii, atomic_numbers #type: ignore
 import networkx as nx #type: ignore
+
 # Internal Modules
 from graphatoms.misc.utilities import merge_dicts,negate, flatten #type: ignore
 from graphatoms.structure.graph import GraphMaker,GraphInput #type: ignore

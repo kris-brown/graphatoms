@@ -3,7 +3,7 @@ from typing import Iterator,List,Tuple,Dict,Callable
 import math,os,copy,sys,json,collections
 import networkx as nx   #type: ignore
 import numpy as np      #type: ignore
-import PyBliss as pb  #type: ignore
+import PyBliss as pb    #type: ignore
 import ase.io           #type: ignore
 from ase.data import chemical_symbols  #type: ignore
 from ase.neighborlist import NeighborList  #type: ignore
