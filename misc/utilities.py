@@ -1,11 +1,14 @@
 # External Modules
 from typing import List
-import itertools,os,math,subprocess
+import itertools,os,subprocess
 ################################################################################
 
 """
 General functions for manipulating python objects
-
+------------------------------------------------
+General
+    true
+    negate
 Cluster-related
     get_cluster
     launch
@@ -14,9 +17,16 @@ Cluster-related
 List-related
     flatten
 
+Dict-related
+    merge_dicts
+
+
 Search-related
     DFS
 """
+
+def true(_):   return True
+def negate(x): return -x
 ##################
 # Cluster related
 #-----------------
@@ -54,6 +64,16 @@ def flatten(lol : List[List]) -> List:
     Flattens a list of Lists to a list
     """
     return [item for sublist in lol for item in sublist]
+
+###############
+# Search related
+###############
+
+def merge_dicts(listDicts : List[dict]) -> dict:
+    """
+    Merge dictionaries, presumes no overlap in keys
+    """
+    return dict(itertools.chain.from_iterable([x.items() for x in listDicts]))
 
 
 ###############

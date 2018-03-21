@@ -14,11 +14,40 @@ from ase.data import covalent_radii, atomic_numbers #type: ignore
 import networkx as nx #type: ignore
 
 # Internal Modules
-from graphatoms.misc.utilities import merge_dicts,negate, flatten #type: ignore
-from graphatoms.structure.graph import GraphMaker,GraphInput #type: ignore
+from graphatoms.misc.utilities import merge_dicts,negate, flatten
+from graphatoms.structure.graph import GraphMaker,GraphInput
 
+"""
+Construct Plotly objects from a graph
+"""
+
+################################################################################
+# Constnats
+#-----------
 user = os.environ['USER']
+
 #####
+labelDict = {
+    'H': 'black'      ,'Li': 'purple'       ,'Be':'mediumaquamarine'
+    ,'B':'pink'       ,'C':'grey'           ,'N':'blue'
+    ,'O':'red'        ,'F':'forestgreen'    ,'Na':'purple'
+    ,'Mg':'lightcoral','Al':'firebrick'     ,'Si':'palevioletred'
+    ,'P':'orange'     ,'S':'red'            ,'Cl':'green'
+    ,'K':'purple'     ,'Ca':'lightsalmon'   ,'Sc':'grey'
+    ,'Ti':'grey'      ,'V':'blue'           ,'Cr':'cyan'
+    ,'Mn':'purple'    ,'Fe':'darkred'       ,'Co':'pink'
+    ,'Ni':'green'     ,'Cu':'brown'         ,'Zn':'indigo'
+    ,'Ga':'pink'      ,'Ge':'lightblue'     ,'As':'fuchsia'
+    ,'Se':'turquoise' ,'Br':'azure'         ,'Rb':'black'
+    ,'Sr':'olive'     ,'Y':'plum'           ,'Zr':'palevioletred'
+    ,'Nb':'aqua'      ,'Mo':'khaki'         ,'Tc':'green'
+    ,'Ru':'lime'      ,'Rh':'teal'          ,'Pd':'grey'
+    ,'Ag':'silver'    ,'Cd':'purple'        ,'In':'blue'
+    ,'Sn':'green'     ,'Sb':'red'           ,'Te':'plum'
+    ,'I':'red'        ,'Cs':'orange'        ,'Ba':'tan'
+    ,'Os':'pink'      ,'Ir':'green'         ,'Pt':'blue'
+    ,'Au':'gold'      ,'Pb':'brown'}
+#########################################################
 class PlotlyAtoms(object):
     """
     Object for creating atoms objects and theircorresponding network graphs
@@ -39,12 +68,13 @@ class PlotlyAtoms(object):
         self.graph                  = graph
         self.cell                   = self.graph.graph['cell']
 
-        self.Xn, self.Yn, self.Zn   = zip(*map(lambda x: x['position'],self.graph.node.values()))
+        self.Xn, self.Yn, self.Zn   = zip(*[x['position'] for x in self.graph.node.values()])
 
         #Chemical Info
-        self.chemical_symbols       = list(map(lambda x: x['symbol'],self.graph.node.values()))
-        self.chemical_formula       = ''.join(map(lambda symb: symb+str(self.chemical_symbols.count(symb))
-                                                 ,np.sort(list(set(self.chemical_symbols)))))
+        self.atomic_numbers         = [x['number'] for x in self.graph.node.values()]
+        self.chemical_symbols       = [x['symbol'] for x in self.graph.node.values()]
+        self.chemical_formula       = ''.join([symb+str(self.chemical_symbols.count(symb))
+                                                  for symb in np.sort(list(set(self.chemical_symbols)))])
 
         #Visualization Parameters
         self.repeat                 = repeat
@@ -68,10 +98,9 @@ class PlotlyAtoms(object):
         """
         Helpful docstring from mike
         """
-        from label import label2Color #type: ignore
-        colors = map(label2Color, self.chemical_symbols)
-        size = map(lambda symb: covalent_radii[atomic_numbers[symb]]*size_factor, self.chemical_symbols)
-        text = self.get_atom_labels()
+        colors = [labelDict[x] for x in self.chemical_symbols]
+        size   = [covalent_radii[atomic_numbers[symb]]*size_factor for symb in self.chemical_symbols]
+        text   = self.get_atom_labels()
 
         for x_shift in range(self.repeat[0])[1:]:
             for y_shift in range(self.repeat[1])[1:]:
@@ -96,7 +125,7 @@ class PlotlyAtoms(object):
                             edge_color = self.get_red_blue_color(edge_dict.get('bondorder',None))
                             edge_colors+= [edge_color]*3
                             counted_edges.append((i,j))
-                            edge_label = [str((i,j))]+ list(map(lambda key: str(edge_dict.get(key,'')),['bondorder','weight']))
+                            edge_label = [str((i,j))] + [str(edge_dict.get(key,'')) for key in ['bondorder','weight']]
                             edge_labels += ['edge pair: {0} <br> bond order: {1} <br> distance: {2}'.format(*edge_label)]*3
 
                             pbc_shift = self._get_pbc_shift(i, j, count)
@@ -123,7 +152,8 @@ class PlotlyAtoms(object):
     def get_atom_labels(self) -> List[str]:
         atom_indices_label      = ['Index: {0}'.format(x) for x in self.graph.nodes()]
         symbols_label           = ['Symbol: {0}'.format(x) for x in self.chemical_symbols]
-        coordination_num_label  = ['Coord #: {0}'.format(x) for x in self.graph.degree().values()]
+
+        coordination_num_label  = ['Coord #: {0}'.format(x) for _,x in self.graph.degree()]
 
         text = ['<br>'.join(string) for string in  zip(atom_indices_label,symbols_label,coordination_num_label)]
         return text
@@ -234,7 +264,7 @@ def plotly_atoms_animation(graph_array
                           ,offline      : bool           = True
                           ) -> None:
 
-        plotly_atoms_list = list(map(lambda graph: PlotlyAtoms(graph, show_indices, repeat), graph_array))
+        plotly_atoms_list = [PlotlyAtoms(graph, show_indices, repeat) for graph in graph_array]
         layout = plotly_atoms_list[0].layout
         data = plotly_atoms_list[0].data
         frames   = [{'data':plotly_atoms.data,'name':str(i)} for i, plotly_atoms in enumerate(plotly_atoms_list)]
@@ -289,6 +319,10 @@ def plotly_neb(pth           : str
     graph_array = [f(x) for x in range(num_of_images)]
 
     plotly_atoms_animation(graph_array,show_indices = show_indices, offline = False, file_name = None)
+
+
+
+
 
 if __name__ == '__main__':
     rootdir = '/scratch/users/ksb/demos/mike_demo/'

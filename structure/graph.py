@@ -3,12 +3,11 @@ from typing import Iterator,List,Tuple,Dict,Callable
 import math,os,copy,sys,json,collections
 import networkx as nx   #type: ignore
 import numpy as np      #type: ignore
-import PyBliss as pb    #type: ignore
 import ase.io           #type: ignore
 from ase.data import chemical_symbols  #type: ignore
 from ase.neighborlist import NeighborList  #type: ignore
 # Internal Modules
-from graphatoms.misc.utilities import (replacer,identity,get_analysis_folder,get_sherlock_folder,negate,true)  #type: ignore
+from graphatoms.misc.utilities import true  #type: ignore
 from graphatoms.misc.utilities import flatten
 from graphatoms.misc.atoms     import match_indices,angle,dihedral   #type: ignore
 
@@ -54,7 +53,7 @@ class GraphInput(object):
             # trajname can still be none, as some methods only need a directory
 
             pth = os.path.join(stordir,'%s.traj'%trajname)
-            self.atoms = ase.io.read(get_sherlock_folder(pth))
+            self.atoms = ase.io.read(pth)
 
     def __str__(self)->str:
         return str(self.__dict__)
@@ -106,7 +105,8 @@ class Edge(object):
         prop_dict = {k: self.__dict__[k] for k in ('weight', 'pbc_shift', 'bondorder')}
         tupl = (self.toNode,self.fromNode)
         for (i,j,d) in grph.edges(data=True):
-            if ((i,j),d['pbc_shift'])==(tupl,map(negate,self.pbc_shift)):
+            x,y,z = self.pbc_shift
+            if ((i,j),d['pbc_shift'])==(tupl,[-x,-y,-z]):
                 return None # REPEAT EDGE, DON'T ADD
         grph.add_edges_from([tupl],**prop_dict)
 
@@ -136,7 +136,7 @@ class GraphMaker(object):
         """
         Finds bonds.json, loads it as a list of dictionaries
         """
-        jsonpth = os.path.join(get_analysis_folder(gi.stordir)
+        jsonpth = os.path.join(gi.stordir
                               ,'chargemol_analysis/%s/bonds.json'%gi.trajname)
 
         with open(jsonpth,'r') as f:
@@ -243,11 +243,13 @@ class GraphMaker(object):
                         break
             return output
 
-    def _graph_to_pybliss(self,gi : GraphInput) -> pb.Graph:
+    def _graph_to_pybliss(self,gi : GraphInput): #no type because we don't import pb.Graph
         """
         Converts undirected multigraph into undirected graph by replacing n edges
             between v1 and v2 with n new nodes bridging v1 and v2
         """
+        import PyBliss as pb    #type: ignore
+
         def edge_add(pb,tup,n):
             (v1,v2) = tup
             def add_new_node(pb):
@@ -323,12 +325,11 @@ class GraphMaker(object):
                                 ,show_groups : bool                      = True
                                 ,filt        : Callable[[ase.Atom],bool] = true
                                 ,show        : bool                      = True
-                                ,atoms       : ase.Atoms                 = None
                                 ) -> None:
         """
         plots bond order analysis maybe?
         """
-        import matplotlib; matplotlib.use('Qt4Agg') #type: ignore
+        import matplotlib; matplotlib.use('TkAgg') #type: ignore
         import matplotlib.pyplot as plt             #type: ignore
 
         def get_symb(z):   return gi.atoms[z].symbol
@@ -346,7 +347,7 @@ class GraphMaker(object):
             return {'horizontalalignment':d[h],'verticalalignment':d[v]}
 
         for ind in range(len(gi.atoms)):
-            if filt(atoms[ind]):
+            if filt(gi.atoms[ind]):
                 xmax   = max([e.bondorder for e in edges[ind]])
                 ax.hlines(ind,xmin,xmax)
                 ax.vlines(xmin,ind-height,ind+height)
@@ -394,6 +395,7 @@ class GraphMaker(object):
         Plot many of 'em
         """
         import graphatoms.structure.plotly_atoms as mp  #type: ignore
+        import matplotlib;matplotlib.use('TkAgg')
         import matplotlib.pyplot as plt
         trajs = os.listdir(os.path.join(gi.stordir,'chargemol_analysis'))
         for trajname in sorted(trajs):
@@ -413,7 +415,8 @@ class GraphMaker(object):
                                   ,adj_matrix = adj_matrix)  # Initialize graph
 
         for i in range(len(gi.atoms)): # add nodes
-            G.add_node(i,symbol   = gi.atoms[i].symbol if self.colored else 1
+            G.add_node(i,symbol   = gi.atoms[i].symbol if self.colored else 'X'
+                        ,number   = gi.atoms[i].number if self.colored else 1
                         ,position = gi.atoms[i].position
                         ,index    = i
                         ,magmom   = gi.atoms[i].magmom)
@@ -442,7 +445,7 @@ class GraphMaker(object):
         """
         Plots many of them
         """
-        import matplotlib; matplotlib.use('Qt4Agg')
+        import matplotlib; matplotlib.use('TkAgg')
         import matplotlib.pyplot as plt
         trajs = os.listdir(os.path.join(gi.stordir,'chargemol_analysis'))
 
@@ -466,7 +469,7 @@ class GraphMaker(object):
         """
         Heatmap representation of bonding between atoms (ignores pbc)
         """
-        import matplotlib; matplotlib.use('Qt4Agg')
+        import matplotlib; matplotlib.use('TkAgg')
         import matplotlib.pyplot as plt
         f,ax  = plt.subplots(nrows=1,ncols=1)
         data  = self._make_adjacency_matrix(gi)
@@ -525,14 +528,14 @@ def adsorbate_graphs(i : int = 0)-> Tuple[nx.Graph,List[int]]:
     """
     Returns a pair (Graph,List of adsorbate indices])
     """
+    print('i = ',i)
     gm = GraphMaker(min_bo=0.05,include_frac=0.8)
     f  = lambda x:  (gm.make_graph(GraphInput(x[0],'init')),x[1])
-    graphs = map(f,[('/nfs/slac/g/suncatfs/ksb/share/jobs/mstatt/151035187731/',[40])    # H
-                 ,('/nfs/slac/g/suncatfs/ksb/share/jobs/mstatt/151036038481/',[40,41]) # NN
-                 ,('/nfs/slac/g/suncatfs/ksb/share/jobs/mstatt/151033093931/',[40,41]) # OH
-                 ,('/scratch/users/ksb/share/jobs/mstatt/151055130379/',[39,40])       # vac NN
-               ])
-    return list(graphs)[i]
+    graphs = [('/scratch/users/ksb/share/analysis_suncat/mstatt/151035187731/',[40])    # H
+             ,('/scratch/users/ksb/share/analysis_suncat/mstatt/151036038481/',[40,41]) # NN
+             ,('/scratch/users/ksb/share/analysis_suncat/mstatt/151033093931/',[40,41]) # OH
+             ]
+    return f(graphs[i])
 
 
 def test_subgraph(p : int = 1)-> None:

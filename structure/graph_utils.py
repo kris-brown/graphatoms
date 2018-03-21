@@ -22,15 +22,18 @@ def graph_summary(G     : nx.Graph
     Summarize some high level features of a graph (print to screen)
     """
     n = G.number_of_nodes()
+    ns = list(G.nodes())
     print('\nsummarizing Graph %s with %d nodes:'%(name,len(G.nodes())))
     print('# of nodes is ',n)
     print('# of edges  is ',G.number_of_edges())
     print('degree  is ',G.degree())
     edict = collections.defaultdict(int) # type: dict
-    for i in range(n):
-        for j in range(n):
-            try: edict[(i,j)]+= len(G.edge[i][j])
-            except KeyError: pass
+
+    for i in ns:
+        for j in ns:
+            if i < j:
+                try: edict[(i,j)]+= len(G[i][j])
+                except KeyError: pass
 
     print(' ||| '.join([' %s : %d '%(k,v) for k,v in sorted(edict.items()) if v > 0]))
 
@@ -191,7 +194,7 @@ def make_subgraph(graph      : nx.Graph
     indices = set(indexlist)
 
     for _ in range(pathlength):
-        indices.update(flatten([graph.edge[i].keys() for i in indices]))
+        indices.update(flatten([graph.neighbors(i) for i in indices]))
 
     return graph.subgraph(indices)
 
