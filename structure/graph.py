@@ -1,5 +1,6 @@
 # External Modules
-from typing import Iterator,List,Tuple,Dict,Callable
+import typing as typ
+
 import math,os,copy,sys,json,collections
 import networkx as nx   #type: ignore
 import numpy as np      #type: ignore
@@ -7,7 +8,7 @@ import ase.io           #type: ignore
 from ase.data import chemical_symbols  #type: ignore
 from ase.neighborlist import NeighborList  #type: ignore
 # Internal Modules
-from graphatoms.misc.utilities import true  #type: ignore
+from graphatoms.misc.utilities import true
 from graphatoms.misc.utilities import flatten
 from graphatoms.misc.atoms     import match_indices,angle,dihedral   #type: ignore
 
@@ -53,7 +54,7 @@ class GraphInput(object):
             # trajname can still be none, as some methods only need a directory
 
             pth = os.path.join(stordir,'%s.traj'%trajname)
-            self.atoms = ase.io.read(pth)
+            self.atoms = ase.io.read(pth) # type: ignore
 
     def __str__(self)->str:
         return str(self.__dict__)
@@ -66,7 +67,7 @@ class GraphInput(object):
         Opens an ASE gui session to view atoms of graph input
         """
         from ase.visualize import view  #type: ignore
-        view(self.atoms)
+        view(self.atoms) # type: ignore
 
 
 ##############################################################################
@@ -78,7 +79,7 @@ class Edge(object):
                 ,fromNode  : int
                 ,toNode    : int
                 ,distance  : float
-                ,offset    : List[int]
+                ,offset    : typ.List[int]
                 ,bondorder : float
                 ,vector    : np.array  = None
                 ) -> None:
@@ -110,7 +111,7 @@ class Edge(object):
                 return None # REPEAT EDGE, DON'T ADD
         grph.add_edges_from([tupl],**prop_dict)
 
-    def inds_pbc(self)->Tuple[int,int,List[int]]:
+    def inds_pbc(self)->typ.Tuple[int,int,typ.List[int]]:
         return (self.fromNode,self.toNode,self.pbc_shift)
 
 ##############################################################################
@@ -132,7 +133,7 @@ class GraphMaker(object):
         self.colored        = True
         self.jmol           = 0.01 if jmol==True else jmol # give a FLOAT to specify jmol tolerance
 
-    def _get_edge_dicts(self,gi : GraphInput) -> List[dict]:
+    def _get_edge_dicts(self,gi : GraphInput) -> typ.List[dict]:
         """
         Finds bonds.json, loads it as a list of dictionaries
         """
@@ -142,14 +143,14 @@ class GraphMaker(object):
         with open(jsonpth,'r') as f:
             return json.load(f)
 
-    def _make_edges(self,gi : GraphInput) ->Dict[int,List[Edge]]:
+    def _make_edges(self,gi : GraphInput) ->typ.Dict[int,typ.List[Edge]]:
         """
         Takes dejson'd bonds.json and makes Edge objects from the list
         """
         edges = collections.defaultdict(list) # type: dict
 
         if self.jmol:
-            jmol_output = jmol(gi.atoms,self.jmol)
+            jmol_output = jmol(gi.atoms,self.jmol) # type: ignore
             for e in jmol_output:
                 edges[e.fromNode].append(e)
             return edges
@@ -161,8 +162,8 @@ class GraphMaker(object):
                 bo,i,j,o = [d[x] for x in keys]
 
                 if bo > self.min_bo:
-                    p2 = gi.atoms[j].position + np.dot(o,gi.atoms.get_cell())
-                    p1 = gi.atoms[i].position
+                    p2 = gi.atoms[j].position + np.dot(o,gi.atoms.get_cell()) # type: ignore
+                    p1 = gi.atoms[i].position                                 # type: ignore
                     dist  = np.linalg.norm(p2-p1)
 
                     edges[i].append(Edge(i,j,dist,np.array(o),bo)) # defaultdict useful
@@ -175,7 +176,7 @@ class GraphMaker(object):
         """
         edge_dict = self._make_edges(gi)
 
-        output = np.zeros((len(gi.atoms),len(gi.atoms)))
+        output = np.zeros((len(gi.atoms),len(gi.atoms)))                    # type: ignore
 
         for i,edges in edge_dict.items():
             for edge in edges:
@@ -184,9 +185,9 @@ class GraphMaker(object):
         return output
 
     def _make_group(self
-                   ,edge_list : List[Edge]
+                   ,edge_list : typ.List[Edge]
                    ,group_cut : float       = None
-                   ) -> List[List[Edge]]:
+                   ) -> typ.List[typ.List[Edge]]:
         """
         Partitions a set of Edges into groups with similar bond strength
         """
@@ -212,7 +213,7 @@ class GraphMaker(object):
 
     def _get_filtered_edges(self
                            ,gi : GraphInput
-                           ) -> List[Edge]: # BOA
+                           ) -> typ.List[Edge]: # BOA
         """
         Return a filtered subset of the edges serialized in bonds.json
         """
@@ -220,7 +221,7 @@ class GraphMaker(object):
         edges      = self._make_edges(gi)
         edge_vals  = flatten(list(edges.values()))
 
-        output = [] # type: List[Edge]
+        output = [] # type: typ.List[Edge]
         if self.jmol:
             for e in  edge_vals:    # only need to filter duplicate edges
                 neg_pbc = [-x for x in e.pbc_shift]
@@ -247,6 +248,8 @@ class GraphMaker(object):
         """
         Converts undirected multigraph into undirected graph by replacing n edges
             between v1 and v2 with n new nodes bridging v1 and v2
+
+            The naming of these variables is insane (change pb to something else?)
         """
         import PyBliss as pb    #type: ignore
 
@@ -282,8 +285,8 @@ class GraphMaker(object):
 
     def _get_sum_of_bond_order_data(self
                                    ,gi: GraphInput
-                                   ,show_indices : List[int] = None
-                                   )->Tuple[List[str],np.array]:
+                                   ,show_indices : typ.List[int] = None
+                                   )->typ.Tuple[typ.List[str],np.array]:
         """
         Sum of bond orders
         """
@@ -323,7 +326,7 @@ class GraphMaker(object):
     def plot_bond_order_analysis(self
                                 ,gi          : GraphInput
                                 ,show_groups : bool                      = True
-                                ,filt        : Callable[[ase.Atom],bool] = true
+                                ,filt        : typ.Callable[[ase.Atom],bool] = true
                                 ,show        : bool                      = True
                                 ) -> None:
         """
@@ -450,7 +453,7 @@ class GraphMaker(object):
         trajs = os.listdir(os.path.join(gi.stordir,'chargemol_analysis'))
 
         #Get the data and labels for each chargemol_analysis in stordir
-        labels, sum_of_bond_orders = [], [] # type: Tuple[List[str],List[float]]
+        labels, sum_of_bond_orders = [], [] # type: typ.Tuple[typ.List[str],typ.List[float]]
         for trajname in sorted(trajs):
             temp_gi = GraphInput(gi.stordir,trajname)
             label_curr, sum_of_bond_order_curr = self._get_sum_of_bond_order_data(temp_gi, show_indices = [show_index])
@@ -488,7 +491,7 @@ class GraphMaker(object):
 
 def jmol(atoms : ase.Atoms
         ,tol   : float      = 0.01
-        ) -> List[Edge]:
+        ) -> typ.List[Edge]:
     """Take an Atoms object and return list of Edges (no bonds.json needed)"""
 
     from pymatgen.analysis.structure_analyzer import JMolCoordFinder  #type: ignore
@@ -524,9 +527,9 @@ def example_graph(i : int = 0)-> nx.Graph:
                      ])
     return list(graphs)[i]
 
-def adsorbate_graphs(i : int = 0)-> Tuple[nx.Graph,List[int]]:
+def adsorbate_graphs(i : int = 0)-> typ.Tuple[nx.Graph,typ.List[int]]:
     """
-    Returns a pair (Graph,List of adsorbate indices])
+    Returns a pair (Graph,typ.List of adsorbate indices])
     """
     print('i = ',i)
     gm = GraphMaker(min_bo=0.05,include_frac=0.8)

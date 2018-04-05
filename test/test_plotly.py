@@ -43,7 +43,7 @@ def mk_plotly(stordir      : str            = example
              ,trajname     : str            = 'final'
              ,min_bo       : float          = 0.03
              ,include_frac : float          = 0.8
-             ,repeat       : Tuple[int,int] = (1,1)
+             ,repeat       : Tuple[int,int] = (2,2)
              ):
 
     input = GraphInput(stordir,trajname)

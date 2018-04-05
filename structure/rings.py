@@ -4,8 +4,8 @@ import networkx as nx #type: ignore
 import collections,copy,os,itertools
 
 # Internal Modules
-import CataLog.structure.graph as GR #type: ignore
-from CataLog.misc.utilities import negate,DFS #type: ignore
+import graphatoms.structure.graph as GR #type: ignore
+from graphatoms.misc.utilities import negate,DFS #type: ignore
 ################################################################################
 
 TrajectoryStep = Tuple[int,Tuple[int,int,int]]
@@ -31,7 +31,7 @@ class RingEdge(object):
         self.dy       = dy
         self.dz       = dz
 
-    def reverse(self) -> RingEdge:
+    def reverse(self) :
         return RingEdge(self.toNode,self.fromNode,-self.dx,-self.dy,-self.dz)
 
     def __str__(self) -> str:
@@ -39,7 +39,7 @@ class RingEdge(object):
 
     def __eq__(self,other) -> bool:
         return self.__dict__ == other.__dict__
-        
+
     def __repr__(self)->str:
         return '<Edge:%d %d>'%(self.fromNode,self.toNode)
 ##############################################################################
@@ -121,7 +121,7 @@ def actions(s : State)->List[RingEdge]:
     last,offset = s.trajectory[-1]
     def f(p): return (p.fromNode == last
                   and p not in s.visited_dict[offset])
-    a = filter(f, s.remaining_paths)
+    a = list(filter(f, s.remaining_paths))
     return a
 
 
@@ -217,11 +217,11 @@ def water_graphs() -> None:
     """
     Demo
     """
-    water_root = '/scratch/users/ksb/demos/tom_demo/percentiles/'
+    water_root = '/scratch/users/ksb/demos/tom_demo/chrgml/co_5/9_00005/gpaw/'#'/scratch/users/ksb/demos/tom_demo/percentiles/'
     gs = [] # type: list
     for d in sorted(os.listdir(water_root)):
         print('Precessing ',d)
-        gi = GR.GraphInput(water_root+d,'water_slab')
+        gi = GR.GraphInput(water_root+d,'qn')
         g = GR.GraphMaker(min_bo=0.05,include_frac=0.95).make_graph(gi)
         print(summarize_water_ring(g))
         hbonds = 0

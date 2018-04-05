@@ -68,7 +68,8 @@ class PlotlyAtoms(object):
         self.graph                  = graph
         self.cell                   = self.graph.graph['cell']
 
-        self.Xn, self.Yn, self.Zn   = zip(*[x['position'] for x in self.graph.node.values()])
+        posTuples = zip(*[x['position'] for x in self.graph.node.values()])
+        self.Xn, self.Yn, self.Zn   = [list(x) for x in posTuples] # convert tuple to list
 
         #Chemical Info
         self.atomic_numbers         = [x['number'] for x in self.graph.node.values()]
@@ -105,9 +106,9 @@ class PlotlyAtoms(object):
         for x_shift in range(self.repeat[0])[1:]:
             for y_shift in range(self.repeat[1])[1:]:
                 shift = np.dot([x_shift,y_shift,0], self.cell)
-                self.Xn += [self.Xn+shift[0]]
-                self.Yn += [self.Xn+shift[1]]
-                self.Zn += [self.Xn+shift[2]]
+                self.Xn+=[x + shift[0] for x in self.Xn]
+                self.Yn+=[y + shift[1] for y in self.Yn]
+                self.Zn+=[z + shift[2] for z in self.Zn]
 
         self.Xe,self.Ye,self.Ze               = [],[],[] # type: Tuple[list,list,list]
         counted_edges,edge_labels,edge_colors = [],[],[] # type: Tuple[list,list,list]

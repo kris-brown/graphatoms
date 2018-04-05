@@ -1,5 +1,5 @@
 # External
-from typing import Tuple,List,Iterator,Dict
+import typing as typ
 import os,math,time,json,sys,io,shutil,random,glob,string,itertools
 from os.path    import exists,join,getctime
 
@@ -83,7 +83,7 @@ class BondAnalyzer(object):
     def _create_analysis_folder(self
                                ,root_folder : str
                                ,trajname    : str
-                               ) -> Tuple[str,str]:
+                               ) -> typ.Tuple[str,str]:
         """
         Creates a directory for job analysis as well as:
         <root_folder>/chargemol_analysis/<trajname>/
@@ -109,12 +109,15 @@ class BondAnalyzer(object):
         Write a script which, when sbatch'd (ON SHERLOCK), will perform bond order analysis
         """
 
-        content_dict = {'qe':['python sub_chargemol.py']
-                       ,'vasp':['python sub_chargemol.py']
+        content_dict = {'qe':['source /home/ksb/graphatoms/.env/bin/activate'
+                             ,'python3 sub_chargemol.py']
+                       ,'vasp':['source /home/ksb/graphatoms/.env/bin/activate'
+                               ,'python3 sub_chargemol.py']
                        ,'gpaw':["NTASKS=`echo $SLURM_TASKS_PER_NODE|tr '(' ' '|awk '{print $1}'`"
                                ,"NNODES=`scontrol show hostnames $SLURM_JOB_NODELIST|wc -l`"
                                ,'NCPU=`echo " $NTASKS * $NNODES " | bc`'
                                ,'source /scratch/users/ksb/gpaw/paths.bash'
+                               ,'source /home/ksb/graphatoms/.env/bin/activate'
                                ,'mpirun -n $NCPU gpaw-python sub_chargemol.py']}
 
         hours  = time_dict[self.quality] * time_dict2[self.dftcode]
@@ -141,7 +144,7 @@ class BondAnalyzer(object):
         """
         Helpful docstring
         """
-        script = ('from CataLog.chargemol.chargemol import BondAnalyzer\n'
+        script = ('from graphatoms.chargemol.chargemol import BondAnalyzer\n'
                 +"BondAnalyzer('%s','%s')"%(self.dftcode,self.quality)
                 +".analyze('%s','%s')"%(working_path,trajname))
 
@@ -223,7 +226,7 @@ class BondAnalyzer(object):
         """
 
         os.chdir(analysis_path)
-        path_to_chargemol = join(home,'CataLog','chargemol','chargemol_binary') # need to compile parallel with relaxed tolerance but getting error
+        path_to_chargemol = join(home,'graphatoms','chargemol','chargemol_binary') # need to compile parallel with relaxed tolerance but getting error
         os.system(path_to_chargemol)
         print('executing: ',path_to_chargemol)
         check = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')
@@ -271,7 +274,7 @@ class BondAnalyzer(object):
     #-------------------------
     def _mk_kpts(self
                 ,atoms_path : str
-                )->List[int]:
+                ) -> typ.List[int]:
         """
         Chooses appropriate kpt spacing
         """
@@ -280,16 +283,16 @@ class BondAnalyzer(object):
             print('using 441 kpts because TOM')
             return [4,4,1]
 
-        def get_kpt(x):
+        def get_kpt(x : np.array) -> int:
             return int(math.ceil(15/np.linalg.norm(x)))
 
         cell = read(atoms_path).get_cell() # 3 x 3 array
 
-        return  list(map(get_kpt,cell))
+        return  [get_kpt(v) for v in cell]
 
     def _mk_gpaw(self
                 ,atoms_path : str
-                ): # ignore return type ... not everyone can import GPAW
+                ) -> typ.Any: # ignore return type ... not everyone can import GPAW
         """
         Make a GPAW calculator
         """
@@ -307,7 +310,7 @@ class BondAnalyzer(object):
                                          ,'bands':-10})
     def _mk_vasp(self
                 ,atoms_path : str
-                ): # ignore return type
+                ) -> typ.Any: # ignore return type
         """
         Make a VASP calculator
         """
@@ -323,7 +326,7 @@ class BondAnalyzer(object):
 
     def _mk_qe(self
               ,atoms_path : str
-              ): # ignore return type
+              ) -> typ.Any: # ignore return type
         """
         Make a QE calculator
         """
@@ -345,22 +348,21 @@ class BondAnalyzer(object):
 
     def _sort_dict(self
                   ,analysis_path : str
-                  ) -> Dict[int,int]:
+                  ) -> typ.Dict[int,int]:
         """
         Read ase-sort.dat. Only should be called if VASP
         """
 
         with open(join(analysis_path,'ase-sort.dat'),'r') as f:
             loglines = map(lambda x: map(int,x.split()),f.readlines())
-            return {x:y for x,y in loglines} #dict(map(tuple,loglines))
+            return {x:y for x,y in loglines}
 
     def _core_dict(self
                   ,analysis_path : str
-                  ) -> Dict[int,int]:
+                  ) -> typ.Dict[int,int]:
         """
         For QE calculations, get {atomic number : # core electrons}
         """
-
         cordict = {}
         with open(join(analysis_path,'calcdir','log'),'r') as f:
             loglines = list(filter(None,[x.split() for x in f.readlines()]))
@@ -436,7 +438,7 @@ class PotentialEdge(object):
                 ,fromNode   : int
                 ,toNode     : int
                 ,distance   : float
-                ,offset     : Iterator[int]
+                ,offset     : typ.List[int]
                 ,bond_order : float
                 ,tot        : float
                 ) -> None:
@@ -455,15 +457,15 @@ class BondOrderSection(object):
                 ,atoms     : ase.Atoms
                 ,ind       : int
                 ,sumBO     : float
-                ,raw_lines : List[str]
+                ,raw_lines : typ.List[str]
                 ,sortdict  : dict
                 ,pbcdict   : dict
                 ) -> None:
 
-        self.atoms    = atoms                     # ase.Atoms
-        self.ind      = ind                       # Int
-        self.sumBO    = sumBO                     # Float
-        self.bonds    = map(parse_line,raw_lines) # [(index,bo,offset)]
+        self.atoms    = atoms
+        self.ind      = ind
+        self.sumBO    = sumBO
+        self.bonds    = [parse_line(x) for x in raw_lines]
         self.sortdict = sortdict
         self.pbcdict  = pbcdict
 
@@ -479,7 +481,7 @@ class BondOrderSection(object):
         return pj - pi
 
     def makeEdge(self
-                ,tup :  Tuple[int,float,Iterator[int]]
+                ,tup :  typ.Tuple[int,float,typ.List[int]]
                 ) -> PotentialEdge:
         """
         Creates an Edge instance from the result of a parsed Bond Order log line
@@ -488,7 +490,7 @@ class BondOrderSection(object):
         fromInd = self.ind
 
         if self.sortdict: # undo VASP reordering if necessary
-            fromInd,toInd = map(self.sortdict.get,[fromInd,toInd])
+            fromInd,toInd = [self.sortdict[x] for x in [fromInd,toInd]] # type: ignore
 
         # correct for WRAPPING atoms
         offset = (np.array(offset) +  self._relative_shift(fromInd,toInd)).tolist()
@@ -500,9 +502,9 @@ class BondOrderSection(object):
 
         return PotentialEdge(fromInd,toInd,d,offset,bo,self.sumBO)
 
-    def make_edges(self)->List[PotentialEdge]:
+    def make_edges(self)->typ.List[PotentialEdge]:
         """Apply edgemaker to result of parsing logfile lines"""
-        return  list(map(self.makeEdge,self.bonds))
+        return  [self.makeEdge(b) for b in self.bonds]
 
 
 ###################
@@ -512,12 +514,12 @@ class BondOrderSection(object):
 def parse_chargemol(analysis_path : str
                    ,atoms_path    : str
                    ,sortdict      : dict
-                   ) -> List[PotentialEdge]:
+                   ) -> typ.List[PotentialEdge]:
     """
     Read file DDEC6_even_tempered_bond_orders.xyz
     """
-    header,content    = [], [] # type: Tuple[List[str],List[str]]
-    sections          = []     # type: List[BondOrderSection]
+    header,content    = [], [] # type: typ.Tuple[typ.List[str],typ.List[str]]
+    sections          = []     # type: typ.List[BondOrderSection]
     head_flag,counter = True,-1       # Initialize
     filepath = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')# File to parse
 
@@ -537,19 +539,21 @@ def parse_chargemol(analysis_path : str
                 counter += 1                        # update index of our from_index atom
             elif 'sum' in line:                     # summary line at end of a section
                 sumBO = float(line.split()[-1])     # grab sum of bond orders
+
+
                 sections.append(BondOrderSection(atoms,counter,sumBO,content
                                                 ,sortdict,dict_diff(pbcdict,chargemol_pbc)))
             else: content.append(line)              # business-as-usual, add to buffer
 
     return  flatten([x.make_edges() for x in sections]) # single list of edges
 
-def parse_line(line : str) -> Tuple[int,float,Iterator[int]]:
+def parse_line(line : str) -> typ.Tuple[int,float,typ.List[int]]:
     """
     Get bonded atom, bond order, and offset
     """
     assert line[:16]==' Bonded to the (', "No parse line ->"+line+'<- %d'%len(line)
     offStr,indStr,boStr = line[16:].split(')')
-    offset = map(int,offStr.split(',')) # Chunk containing offset info
+    offset = [int(x) for x in offStr.split(',')] # Chunk containing offset info
     ind    = int(indStr.split()[-3]) - 1        # Chunk containing index info (chargemol starts at 1, not 0)
     bo     = float(boStr.split()[4])            # Chunk containing B.O. info
     return (ind,bo,offset)
@@ -558,28 +562,35 @@ def parse_line(line : str) -> Tuple[int,float,Iterator[int]]:
 # Misc
 #-----
 
-def parse_chargemol_pbc(header_lines : List[str],cell : List[float]):
+def parse_chargemol_pbc(header_lines : typ.List[str]
+                       ,cell         : typ.List[float]
+                       ) -> typ.Dict[int,typ.Tuple[int,int,int]]:
+    """
+    Helpful docstring
+    """
     atoms = ase.Atoms(cell=cell)
     for i,l in enumerate(header_lines[2:]):
         try:
             s,x,y,z,_ = l.split()
-            p = map(float,[x,y,z])
+            p = [float(q) for q in [x,y,z]]
+            print(p)
             atoms.append(ase.Atom(s,position=p))
-        except Exception as e: pass
+        except Exception as e: print(e)
+
     return mk_pbc_dict(atoms)
 
 
 def mk_pbc_dict(atoms : ase.Atoms
-               ) -> Dict[int,Tuple[int,int,int]]:
+               ) -> typ.Dict[int,typ.Tuple[int,int,int]]:
     """
     Helpful docstring
     """
-    def g(tup):
+    def g(tup : tuple)->typ.Tuple[int,int,int]:
         """
         Helper function to yield tuples for pbc_dict
         """
 
-        def f(x):
+        def f(x : float)->int:
             """
             Helper function for g
             """
@@ -595,9 +606,9 @@ def mk_pbc_dict(atoms : ase.Atoms
     pbc_dict    = {i : g(p) for i,p in scaled_pos_}
     return pbc_dict
 
-def dict_diff(d1:Dict[int,np.array]
-             ,d2:Dict[int,np.array]
-             )->Dict[int,np.array]:
+def dict_diff(d1 : typ.Dict[int,np.array]
+             ,d2 : typ.Dict[int,np.array]
+             ) -> typ.Dict[int,np.array]:
     """
     Helpful docstring
     """
