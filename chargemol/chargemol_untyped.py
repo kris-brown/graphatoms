@@ -1,6 +1,5 @@
 # External
-import typing as typ
-import os,math,time,json,sys,io,shutil,random,glob,string,itertools
+import os,math,time,json,sys,io,shutil,random,glob,string,itertools,subprocess
 from os.path    import exists,join,getctime
 
 import ase                          #type: ignore
@@ -8,9 +7,43 @@ import numpy as np                  #type: ignore
 from ase.units  import Bohr         #type: ignore
 from ase.io     import write,read   #type: ignore
 
-# Internal
-from graphatoms.misc.utilities import (flatten,safeMkDir,safeMkDirForce,running_jobs_sherlock) #type: ignore
-from graphatoms.misc.print_parse  import print_time #type: ignore
+
+def print_time(floatHours ):
+	intHours = int(floatHours)
+	return "%02d:%02d" % (intHours,(floatHours-intHours)*60)
+
+def running_jobs_sherlock() :
+    """
+    Get your current running jobs on the Sherlock cluster
+    """
+    user = os.environ['USER']
+
+    return subprocess.check_output(['squeue', '-u',user,'-o','%Z']).split()[1:]
+
+def safeMkDir(pth  ,verbose =True):
+    """
+    Make directories even if they already exist
+    """
+    try:  os.mkdir(pth)
+    except OSError:
+        if verbose:
+            print('directory %s already exists ?!'%pth)
+
+def safeMkDirForce(pth ) :
+    """
+    Makes a nested directory, even if intermediate links do not yet exist
+    """
+    components = pth.split('/')
+    curr_dir = [components[0]]
+    for c in components[1:]:
+        curr_dir.append(c)
+        safeMkDir('/'+os.path.join(*curr_dir),verbose=False)
+
+def flatten(lol) :
+    """
+    Flattens a list of Lists to a list
+    """
+    return [item for sublist in lol for item in sublist]
 
 """
 FUNCTIONS NEEDED TO GENERATE BONDS.JSON
@@ -22,7 +55,7 @@ FUNCTIONS NEEDED TO GENERATE BONDS.JSON
 user         = os.environ['USER']
 home         = os.environ['HOME']
 graphatoms   = os.environ['GRAPHATOMS_PATH']
-queue        = 'iric' # 'iric' if os.environ['SHERLOCK'] == '1' else 'normal'
+queue        = 'iric' 
 
 
 conv_dict = {'low':1,       'mid':0.1,     'high': 0.01, 'tom': 0.01}
@@ -30,15 +63,15 @@ pw_dict   = {'low':300,     'mid':400,     'high': 500,  'tom': 600}
 time_dict = {'low':1,       'mid':2,       'high': 3,    'tom': 4}
 
 logfile   = {'gpaw':'log','qe':'calcdir/log','vasp':'OUTCAR'}
-time_dict2= {'gpaw':0.5,    'qe':2,          'vasp':1}
+time_dict2= {'gpaw':0.5,    'qe':2,          'vasp':0.2}
 
 codes     = ['gpaw','vasp']#,'qe']
 qualities = ['low']#],'mid','high']
 ############################################
 
-def test_suite(working_path : str
-              ,trajname     : str
-              ) -> None:
+def test_suite(working_path
+              ,trajname
+              ) :
     """
     Run a suite of tests on a directory with a traj in it
     """
@@ -66,9 +99,9 @@ class BondAnalyzer(object):
     """
 
     def __init__(self
-                ,dftcode : str ='gpaw'
-                ,quality : str = 'low'
-                ) -> None:
+                ,dftcode  ='gpaw'
+                ,quality  = 'low'
+                ) :
 
         assert dftcode in ['gpaw','qe','vasp']
         assert quality in ['low','mid','high','tom']
@@ -81,9 +114,9 @@ class BondAnalyzer(object):
     # META METHODS
     #--------------------
     def _create_analysis_folder(self
-                               ,root_folder : str
-                               ,trajname    : str
-                               ) -> typ.Tuple[str,str]:
+                               ,root_folder
+                               ,trajname
+                               ) :
         """
         Creates a directory for job analysis as well as:
         <root_folder>/chargemol_analysis/<trajname>/
@@ -103,8 +136,8 @@ class BondAnalyzer(object):
         return analysis_folder,traj_path
 
     def _write_metascript(self
-                         ,analysis_path : str
-                         ) -> None:
+                         ,analysis_path
+                         ):
         """
         Write a script which, when sbatch'd (ON SHERLOCK), will perform bond order analysis
         """
@@ -112,7 +145,8 @@ class BondAnalyzer(object):
         content_dict = {'qe':['source %s/.env/bin/activate'%graphatoms
                              ,'python3 sub_chargemol.py']
                        ,'vasp':['source %s/.env/bin/activate'%graphatoms
-                               ,'/home/users/vossj/suncat/bin/python_w sub_chargemol.py']
+                               ,'export PYTHONPATH=/scratch/users/ksb'
+                               ,'python3 sub_chargemol.py']
                        ,'gpaw':["NTASKS=`echo $SLURM_TASKS_PER_NODE|tr '(' ' '|awk '{print $1}'`"
                                ,"NNODES=`scontrol show hostnames $SLURM_JOB_NODELIST|wc -l`"
                                ,'NCPU=`echo " $NTASKS * $NNODES " | bc`'
@@ -123,7 +157,7 @@ class BondAnalyzer(object):
         hours  = time_dict[self.quality] * time_dict2[self.dftcode]
 
         script = '\n'.join(['#!/bin/bash'
-                        ,'#SBATCH -p %s'%queue
+                        ,'#SBATCH -p %s,owners'%queue
                         ,'#SBATCH --time=%s:00'%(print_time(hours))
                         ,'#SBATCH --mem-per-cpu=4000'
                         ,'#SBATCH --error=err.log'
@@ -137,17 +171,14 @@ class BondAnalyzer(object):
         os.system('chmod 755 ' + path)
 
     def _write_script(self
-                     ,analysis_path : str
-                     ,working_path  : str
-                     ,trajname      : str
-                     ) -> None:
+                     ,analysis_path
+                     ,working_path
+                     ,trajname
+                     ):
         """
         Helpful docstring
         """
-        if_gpaw = '_untyped' # if self.dftcode=='gpaw' else ''
-        header  = '#!/home/users/vossj/suncat/bin/python_w' if self.dftcode=='vasp' else ''
-
-        script = (header+'\nfrom graphatoms.chargemol.chargemol%s import BondAnalyzer\n'%if_gpaw
+        script = ('from graphatoms.chargemol.chargemol import BondAnalyzer\n'
                 +"BondAnalyzer('%s','%s')"%(self.dftcode,self.quality)
                 +".analyze('%s','%s')"%(working_path,trajname))
 
@@ -158,9 +189,9 @@ class BondAnalyzer(object):
     #----------------------
 
     def _generate_charge_density(self
-                                ,analysis_path : str
-                                ,atoms_path    : str
-                                ) -> None:
+                                ,analysis_path
+                                ,atoms_path
+                                ) :
         """
         Helpful docstring
         """
@@ -192,9 +223,9 @@ class BondAnalyzer(object):
             #normalize_cube('valence_density.cube',extra_charge)
 
     def _write_chargemol_input(self
-                              ,analysis_path : str
-                              ,atoms_path    : str
-                              ) -> None:
+                              ,analysis_path
+                              ,atoms_path
+                              ) :
         """
         Write job_control.txt to an analysis folder
         """
@@ -221,9 +252,9 @@ class BondAnalyzer(object):
             f.write(job_control)
 
     def _call_chargemol(self
-                       ,analysis_path : str
-                       ,atoms_path    : str
-                       ) -> None:
+                       ,analysis_path
+                       ,atoms_path
+                       ) :
         """
         Call chargemol binary from a specified folder
         """
@@ -241,9 +272,9 @@ class BondAnalyzer(object):
             #os.system(path_to_chargemol)
 
     def _postprocess(self
-                    ,analysis_path : str
-                    ,atoms_path    : str
-                    ) -> None:
+                    ,analysis_path
+                    ,atoms_path
+                    ) :
         """
         Helpful docstring
         """
@@ -257,9 +288,9 @@ class BondAnalyzer(object):
         with open(join(analysis_path,'bonds.json'),'w') as f: json.dump(data,f)
 
     def _write_metadata(self
-                       ,analysis_path : str
-                       ,atoms_path    : str
-                       ) -> None:
+                       ,analysis_path
+                       ,atoms_path
+                       ) :
         """
         Write data about how bonds.json was calculated to file
         """
@@ -276,8 +307,8 @@ class BondAnalyzer(object):
     # DFTCODE-SPECIFIC METHODS
     #-------------------------
     def _mk_kpts(self
-                ,atoms_path : str
-                ) -> typ.List[int]:
+                ,atoms_path
+                ):
         """
         Chooses appropriate kpt spacing
         """
@@ -286,7 +317,7 @@ class BondAnalyzer(object):
             print('using 441 kpts because TOM')
             return [4,4,1]
 
-        def get_kpt(x : np.array) -> int:
+        def get_kpt(x ) :
             return int(math.ceil(15/np.linalg.norm(x)))
 
         cell = read(atoms_path).get_cell() # 3 x 3 array
@@ -294,8 +325,8 @@ class BondAnalyzer(object):
         return  [get_kpt(v) for v in cell]
 
     def _mk_gpaw(self
-                ,atoms_path : str
-                ) -> typ.Any: # ignore return type ... not everyone can import GPAW
+                ,atoms_path
+                ) : # ignore return type ... not everyone can import GPAW
         """
         Make a GPAW calculator
         """
@@ -312,8 +343,8 @@ class BondAnalyzer(object):
                                          ,'density':0.01 * scale
                                          ,'bands':-10})
     def _mk_vasp(self
-                ,atoms_path : str
-                ) -> typ.Any: # ignore return type
+                ,atoms_path
+                ) : # ignore return type
         """
         Make a VASP calculator
         """
@@ -328,8 +359,8 @@ class BondAnalyzer(object):
                                     ,nelmdl=3 ,isym= 0 ,lcharg = True,laechg = True)
 
     def _mk_qe(self
-              ,atoms_path : str
-              ) -> typ.Any: # ignore return type
+              ,atoms_path
+              ) : # ignore return type
         """
         Make a QE calculator
         """
@@ -350,8 +381,8 @@ class BondAnalyzer(object):
                         ,outdir='calcdir')
 
     def _sort_dict(self
-                  ,analysis_path : str
-                  ) -> typ.Dict[int,int]:
+                  ,analysis_path
+                  ) :
         """
         Read ase-sort.dat. Only should be called if VASP
         """
@@ -361,8 +392,8 @@ class BondAnalyzer(object):
             return {x:y for x,y in loglines}
 
     def _core_dict(self
-                  ,analysis_path : str
-                  ) -> typ.Dict[int,int]:
+                  ,analysis_path
+                  ):
         """
         For QE calculations, get {atomic number : # core electrons}
         """
@@ -380,9 +411,9 @@ class BondAnalyzer(object):
     # EXPOSED METHODS
     #-----------------
     def submit(self
-              ,working_path : str
-              ,trajname     : str
-              ) -> None:
+              ,working_path
+              ,trajname
+              ) :
         """
         Hlepful docstring
         """
@@ -396,10 +427,10 @@ class BondAnalyzer(object):
             os.system('sbatch %s'%join(analysis_path,'sub_chargemol.sh'))
 
     def analyze(self
-               ,working_path : str
-               ,trajname     : str
-               ,start_ind    : int = 0
-               ) -> None:
+               ,working_path
+               ,trajname
+               ,start_ind     = 0
+               ) :
         """
         Start the process at any point using start_ind
         """
@@ -416,8 +447,8 @@ class BondAnalyzer(object):
             process(analysis_path,trajpth)
 
     def launch_neb(self
-                  ,neb_path : str
-                  ) -> None:
+                  ,neb_path
+                  ) :
         """
         Take a neb folder to generate chargemol jobs for all images
         """
@@ -438,13 +469,13 @@ class PotentialEdge(object):
     graph-worthy bond. This class is nothing more than a dictionary.
     """
     def __init__(self
-                ,fromNode   : int
-                ,toNode     : int
-                ,distance   : float
-                ,offset     : typ.List[int]
-                ,bond_order : float
-                ,tot        : float
-                ) -> None:
+                ,fromNode
+                ,toNode
+                ,distance
+                ,offset
+                ,bond_order
+                ,tot
+                ) :
 
         self.fromNode = fromNode
         self.toNode   = toNode
@@ -457,13 +488,13 @@ class PotentialEdge(object):
 class BondOrderSection(object):
     """Process one section of the Bond Order output of Chargemol"""
     def __init__(self
-                ,atoms     : ase.Atoms
-                ,ind       : int
-                ,sumBO     : float
-                ,raw_lines : typ.List[str]
-                ,sortdict  : dict
-                ,pbcdict   : dict
-                ) -> None:
+                ,atoms
+                ,ind
+                ,sumBO
+                ,raw_lines
+                ,sortdict
+                ,pbcdict
+                ) :
 
         self.atoms    = atoms
         self.ind      = ind
@@ -473,9 +504,9 @@ class BondOrderSection(object):
         self.pbcdict  = pbcdict
 
     def _relative_shift(self
-                       ,i : int
-                       ,j : int
-                       ) -> np.array:
+                       ,i
+                       ,j
+                       ) :
         """
         Given a pbc_dict and two indices, return the original pbc shift
         for a bond from i to j
@@ -484,8 +515,8 @@ class BondOrderSection(object):
         return pj - pi
 
     def makeEdge(self
-                ,tup :  typ.Tuple[int,float,typ.List[int]]
-                ) -> PotentialEdge:
+                ,tup
+                ) :
         """
         Creates an Edge instance from the result of a parsed Bond Order log line
         """
@@ -505,7 +536,7 @@ class BondOrderSection(object):
 
         return PotentialEdge(fromInd,toInd,d,offset,bo,self.sumBO)
 
-    def make_edges(self)->typ.List[PotentialEdge]:
+    def make_edges(self):
         """Apply edgemaker to result of parsing logfile lines"""
         return  [self.makeEdge(b) for b in self.bonds]
 
@@ -514,15 +545,15 @@ class BondOrderSection(object):
 # Parsing Functions
 #-------------------
 
-def parse_chargemol(analysis_path : str
-                   ,atoms_path    : str
-                   ,sortdict      : dict
-                   ) -> typ.List[PotentialEdge]:
+def parse_chargemol(analysis_path
+                   ,atoms_path
+                   ,sortdict
+                   ):
     """
     Read file DDEC6_even_tempered_bond_orders.xyz
     """
-    header,content    = [], [] # type: typ.Tuple[typ.List[str],typ.List[str]]
-    sections          = []     # type: typ.List[BondOrderSection]
+    header,content    = [], []
+    sections          = []
     head_flag,counter = True,-1       # Initialize
     filepath = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')# File to parse
 
@@ -550,7 +581,7 @@ def parse_chargemol(analysis_path : str
 
     return  flatten([x.make_edges() for x in sections]) # single list of edges
 
-def parse_line(line : str) -> typ.Tuple[int,float,typ.List[int]]:
+def parse_line(line ) :
     """
     Get bonded atom, bond order, and offset
     """
@@ -565,9 +596,9 @@ def parse_line(line : str) -> typ.Tuple[int,float,typ.List[int]]:
 # Misc
 #-----
 
-def parse_chargemol_pbc(header_lines : typ.List[str]
-                       ,cell         : typ.List[float]
-                       ) -> typ.Dict[int,typ.Tuple[int,int,int]]:
+def parse_chargemol_pbc(header_lines
+                       ,cell
+                       ) :
     """
     Helpful docstring
     """
@@ -583,17 +614,17 @@ def parse_chargemol_pbc(header_lines : typ.List[str]
     return mk_pbc_dict(atoms)
 
 
-def mk_pbc_dict(atoms : ase.Atoms
-               ) -> typ.Dict[int,typ.Tuple[int,int,int]]:
+def mk_pbc_dict(atoms
+               ) :
     """
     Helpful docstring
     """
-    def g(tup : tuple)->typ.Tuple[int,int,int]:
+    def g(tup ):
         """
         Helper function to yield tuples for pbc_dict
         """
 
-        def f(x : float)->int:
+        def f(x):
             """
             Helper function for g
             """
@@ -609,9 +640,9 @@ def mk_pbc_dict(atoms : ase.Atoms
     pbc_dict    = {i : g(p) for i,p in scaled_pos_}
     return pbc_dict
 
-def dict_diff(d1 : typ.Dict[int,np.array]
-             ,d2 : typ.Dict[int,np.array]
-             ) -> typ.Dict[int,np.array]:
+def dict_diff(d1
+             ,d2
+             ):
     """
     Helpful docstring
     """
