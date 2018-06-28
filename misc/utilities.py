@@ -1,5 +1,5 @@
 # External Modules
-from typing import List
+from typing import List,Callable,Any
 import itertools,os,subprocess
 ################################################################################
 
@@ -65,16 +65,15 @@ def flatten(lol : List[List]) -> List:
     """
     return [item for sublist in lol for item in sublist]
 
-###############
+################
 # Search related
-###############
+################
 
 def merge_dicts(listDicts : List[dict]) -> dict:
     """
     Merge dictionaries, presumes no overlap in keys
     """
     return dict(itertools.chain.from_iterable([x.items() for x in listDicts]))
-
 
 ###############
 # Search related
@@ -84,20 +83,20 @@ class DFS(object):
     Returns all solutions to a search problem with no cost
     """
     def __init__(self
-                ,succ
-                ,actions
-                ,is_end
-                ,result
-                )->None:
-        #self.init_state = init_state
+                ,succ     : Callable
+                ,actions  : Callable
+                ,is_end   : Callable
+                ,result   : Callable
+                ) -> None:
         self.succ    = succ
         self.actions = actions
         self.is_end  = is_end
         self.result  = result
-        self.verbose=False
+        self.verbose = False
 
-    def run_dfs(self,s):
+    def run_dfs(self,s:Any)->Any:
         """
+        Run DFS from some (starting or intermediate) State until termination
         """
         if self.verbose: print('entering run_dfs with s = ',s)
         new_states = [self.succ(s,a) for a in self.actions(s)]

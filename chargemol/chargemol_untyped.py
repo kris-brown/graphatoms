@@ -55,7 +55,7 @@ FUNCTIONS NEEDED TO GENERATE BONDS.JSON
 user         = os.environ['USER']
 home         = os.environ['HOME']
 graphatoms   = os.environ['GRAPHATOMS_PATH']
-queue        = 'iric' 
+queue        = 'iric'
 
 
 conv_dict = {'low':1,       'mid':0.1,     'high': 0.01, 'tom': 0.01}
@@ -254,23 +254,18 @@ class BondAnalyzer(object):
     def _call_chargemol(self
                        ,analysis_path
                        ,atoms_path
-                       ) :
+                       ):
         """
         Call chargemol binary from a specified folder
         """
 
         os.chdir(analysis_path)
-        path_to_chargemol = join(home,'graphatoms','chargemol','chargemol_binary') # need to compile parallel with relaxed tolerance but getting error
+        path_to_chargemol = '/scratch/users/ksb/graphatoms/chargemol/chargemol_binary' # need to compile parallel with relaxed tolerance but getting error
         os.system(path_to_chargemol)
         print('executing: ',path_to_chargemol)
         check = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')
         if not exists(check):
-            pass
-            #c = get_extra_charge(analysis_path)
-            #print 'normalizing by factor of ',c
-            #normalize_cube('valence_density.cube',c)
-            #os.system(path_to_chargemol)
-
+            raise ValueError('expected %s to exist'%check)
     def _postprocess(self
                     ,analysis_path
                     ,atoms_path

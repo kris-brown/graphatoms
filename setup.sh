@@ -1,6 +1,4 @@
-virtualenv --python=python3 .env
-
-cat environmental_vars.txt >> .env/bin/activate
+python3 -m venv .env
 
 source .env/bin/activate
 

@@ -1,5 +1,5 @@
 # External Modules
-from typing import List,Tuple,Dict,Callable
+from typing import List,Tuple,Dict,Callable,Any
 import networkx as nx #type: ignore
 import collections,copy,os,itertools
 
@@ -31,28 +31,28 @@ class RingEdge(object):
         self.dy       = dy
         self.dz       = dz
 
-    def reverse(self) :
+    def reverse(self)->'RingEdge' :
         return RingEdge(self.toNode,self.fromNode,-self.dx,-self.dy,-self.dz)
 
     def __str__(self) -> str:
         return '<RingEdge:'+str(self.__dict__)+'>'
 
-    def __eq__(self,other) -> bool:
+    def __eq__(self,other:Any) -> bool:
         return self.__dict__ == other.__dict__
 
     def __repr__(self)->str:
         return '<Edge:%d %d>'%(self.fromNode,self.toNode)
 ##############################################################################
-
+XYZ = Tuple[int,int,int]
 class State(object):
     """
     helpful docstring
     """
     def __init__(self
-                ,trajectory : Trajectory
-                ,finalNode  : int
+                ,trajectory      : Trajectory
+                ,finalNode       : int
                 ,remaining_paths : List[RingEdge]
-                ,visited_dict    : Dict[Tuple[int,int,int],List[RingEdge]]
+                ,visited_dict    : Dict[XYZ,List[RingEdge]]
                 ) -> None:
         self.trajectory      = trajectory
         self.finalNode       = finalNode
@@ -155,10 +155,7 @@ def get_rings(graph_in : nx.Graph)->List[Trajectory]:
         # print 'finding rings for O node %d (%d/%d)'%(n,i+1,len(o_nodes))
         s = State([(n,(0,0,0))],n,edges,collections.defaultdict(list))
         output.extend(DFS(succ,actions,isEnd,result).run_dfs(s))
-
     return output
-
-
 
 def find_water_ring(g : nx.Graph
                    )->List[Trajectory]:

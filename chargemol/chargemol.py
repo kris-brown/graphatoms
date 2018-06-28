@@ -147,9 +147,10 @@ class BondAnalyzer(object):
         if_gpaw = '_untyped' # if self.dftcode=='gpaw' else ''
         header  = '#!/home/users/vossj/suncat/bin/python_w' if self.dftcode=='vasp' else ''
 
-        script = (header+'\nfrom graphatoms.chargemol.chargemol%s import BondAnalyzer\n'%if_gpaw
-                +"BondAnalyzer('%s','%s')"%(self.dftcode,self.quality)
-                +".analyze('%s','%s')"%(working_path,trajname))
+        script = '\n'.join([header
+                           ,'from graphatoms.chargemol.chargemol%s import BondAnalyzer'%if_gpaw
+                           ,"BondAnalyzer('%s','%s'.analyze('%s','%s'))"%(self.dftcode,self.quality,working_path,trajname)
+                           ])
 
         with open(join(analysis_path,'sub_chargemol.py'),'w') as f:
             f.write(script)
@@ -229,16 +230,12 @@ class BondAnalyzer(object):
         """
 
         os.chdir(analysis_path)
-        path_to_chargemol = join(home,'graphatoms','chargemol','chargemol_binary') # need to compile parallel with relaxed tolerance but getting error
+        path_to_chargemol = '/scratch/users/ksb/graphatoms/chargemol/chargemol_binary' # need to compile parallel with relaxed tolerance but getting error
         os.system(path_to_chargemol)
         print('executing: ',path_to_chargemol)
         check = join(analysis_path,'DDEC6_even_tempered_bond_orders.xyz')
         if not exists(check):
-            pass
-            #c = get_extra_charge(analysis_path)
-            #print 'normalizing by factor of ',c
-            #normalize_cube('valence_density.cube',c)
-            #os.system(path_to_chargemol)
+            raise ValueError(analysis_path+'/DDEC6_even_tempered_bond_orders.xyz should exist')
 
     def _postprocess(self
                     ,analysis_path : str

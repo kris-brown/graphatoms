@@ -6,7 +6,6 @@ import networkx as nx   #type: ignore
 import numpy as np      #type: ignore
 import ase.io           #type: ignore
 from ase.data import chemical_symbols  #type: ignore
-from ase.neighborlist import NeighborList  #type: ignore
 # Internal Modules
 from graphatoms.misc.utilities import true
 from graphatoms.misc.utilities import flatten
@@ -531,7 +530,6 @@ def adsorbate_graphs(i : int = 0)-> typ.Tuple[nx.Graph,typ.List[int]]:
     """
     Returns a pair (Graph,typ.List of adsorbate indices])
     """
-    print('i = ',i)
     gm = GraphMaker(min_bo=0.05,include_frac=0.8)
     f  = lambda x:  (gm.make_graph(GraphInput(x[0],'init')),x[1])
     graphs = [('/scratch/users/ksb/share/analysis_suncat/mstatt/151035187731/',[40])    # H
