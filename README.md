@@ -22,7 +22,7 @@ There are many potential benefits in surface science that could arise from
 being able to talk about chemical structures at this high level.
 
 ## This repo
-This repo is simply a collection of scripts that I have found useful in 
+This repo is simply a collection of scripts that I have found useful in
   generating and manipulating these multigraph representations. Certainly a work
   in progress with nothing guaranteed to be correct.
 
