@@ -15,8 +15,7 @@ def parse_chargemol_sherlock(stordir : str,atoms : Atoms) -> None:
     """
     Analyzes the contents of a chargemol calculation directory.
 
-    Returns an unzipped list of <ind,ind,bondorder> triples
-    followed by an unzipped list of <ind,charge> pairs
+    Writes a "bonds.json" file. Optionally, can write a "charge.json" file.
 
     """
 

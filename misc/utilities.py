@@ -1,5 +1,4 @@
 # External Modules
-from typing import List,Callable,Any
 import itertools,os,subprocess
 ################################################################################
 
@@ -31,7 +30,7 @@ def negate(x): return -x
 # Cluster related
 #-----------------
 
-def running_jobs_sherlock() -> List[str]:
+def running_jobs_sherlock():
     """
     Get your current running jobs on the Sherlock cluster
     """
@@ -39,7 +38,7 @@ def running_jobs_sherlock() -> List[str]:
 
     return subprocess.check_output(['squeue', '-u',user,'-o','%Z']).split()[1:]
 
-def safeMkDir(pth : str ,verbose : bool = True) -> None:
+def safeMkDir(pth ,verbose ) :
     """
     Make directories even if they already exist
     """
@@ -48,7 +47,7 @@ def safeMkDir(pth : str ,verbose : bool = True) -> None:
         if verbose:
             print('directory %s already exists ?!'%pth)
 
-def safeMkDirForce(pth : str) -> None:
+def safeMkDirForce(pth) :
     """
     Makes a nested directory, even if intermediate links do not yet exist
     """
@@ -59,7 +58,7 @@ def safeMkDirForce(pth : str) -> None:
         safeMkDir('/'+os.path.join(*curr_dir),verbose=False)
 
 
-def flatten(lol : List[List]) -> List:
+def flatten(lol ):
     """
     Flattens a list of Lists to a list
     """
@@ -69,7 +68,7 @@ def flatten(lol : List[List]) -> List:
 # Search related
 ################
 
-def merge_dicts(listDicts : List[dict]) -> dict:
+def merge_dicts(listDicts) :
     """
     Merge dictionaries, presumes no overlap in keys
     """
@@ -83,18 +82,18 @@ class DFS(object):
     Returns all solutions to a search problem with no cost
     """
     def __init__(self
-                ,succ     : Callable
-                ,actions  : Callable
-                ,is_end   : Callable
-                ,result   : Callable
-                ) -> None:
+                ,succ
+                ,actions
+                ,is_end
+                ,result
+                ) :
         self.succ    = succ
         self.actions = actions
         self.is_end  = is_end
         self.result  = result
         self.verbose = False
 
-    def run_dfs(self,s:Any)->Any:
+    def run_dfs(self,s):
         """
         Run DFS from some (starting or intermediate) State until termination
         """
